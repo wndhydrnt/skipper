@@ -145,12 +145,49 @@ func testIngresses() []*ingressItem {
 				testPathRule("/test2", "service2", backendPort{"port2"}),
 			),
 		),
+		testIngress(
+			"namespace1",
+			"pathroutes",
+			"",
+			backendPort{"port1"},
+			1.0,
+			testRule(
+				"foo.example.net",
+				testPathRule("/foo/token", "service1", backendPort{"port1"}),
+			),
+		),
+		testIngress(
+			"namespace1",
+			"pathroutes",
+			"",
+			backendPort{"port1"},
+			1.0,
+			testRule(
+				"foo.example.net",
+				testPathRule("/foo/tokeninfo", "service2", backendPort{"port1"}),
+			),
+		),
+		testIngress(
+			"namespace1",
+			"pathroutes",
+			"",
+			backendPort{"port1"},
+			1.0,
+			testRule(
+				"foo.example2.net",
+				testPathRule("/foo/token", "service1", backendPort{"port1"}),
+			),
+			testRule(
+				"foo.example2.net",
+				testPathRule("/foo/tokeninfo", "service2", backendPort{"port1"}),
+			),
+		),
 	}
 }
 
 func checkRoutes(t *testing.T, r []*eskip.Route, expected map[string]string) {
 	if len(r) != len(expected) {
-		t.Error("number of routes doesn't match expected", len(r), len(expected))
+		t.Errorf("number of routes doesn't match %d, but expected %d", len(r), len(expected))
 		return
 	}
 
@@ -697,16 +734,21 @@ func TestIngress(t *testing.T) {
 			t.Error("udpate failed")
 		}
 
+		// FIXME(sszuecs): r loaded routes, map is expected
 		checkRoutes(t, r, map[string]string{
-			"kube_namespace1__default_only______":                           "http://1.2.3.4:8080",
-			"kube_namespace2__path_rule_only__www_example_org_____service3": "http://9.0.1.2:7272",
-			"kube_namespace1__mega______":                                   "http://1.2.3.4:8080",
-			"kube_namespace1__mega__foo_example_org___test1__service1":      "http://1.2.3.4:8080",
-			"kube_namespace1__mega__foo_example_org___test2__service2":      "http://5.6.7.8:8181",
-			"kube_namespace1__mega__foo_example_org____":                    "",
-			"kube_namespace1__mega__bar_example_org___test1__service1":      "http://1.2.3.4:8080",
-			"kube_namespace1__mega__bar_example_org___test2__service2":      "http://5.6.7.8:8181",
-			"kube_namespace1__mega__bar_example_org____":                    "",
+			"kube_namespace1__default_only______":                                     "http://1.2.3.4:8080",
+			"kube_namespace2__path_rule_only__www_example_org_____service3":           "http://9.0.1.2:7272",
+			"kube_namespace1__mega______":                                             "http://1.2.3.4:8080",
+			"kube_namespace1__mega__foo_example_org___test1__service1":                "http://1.2.3.4:8080",
+			"kube_namespace1__mega__foo_example_org___test2__service2":                "http://5.6.7.8:8181",
+			"kube_namespace1__mega__foo_example_org____":                              "",
+			"kube_namespace1__mega__bar_example_org___test1__service1":                "http://1.2.3.4:8080",
+			"kube_namespace1__mega__bar_example_org___test2__service2":                "http://5.6.7.8:8181",
+			"kube_namespace1__mega__bar_example_org____":                              "",
+			"kube_namespace1__pathroutes__foo_example_net___foo_token__service1":      "http://1.2.3.4:8080",
+			"kube_namespace1__pathroutes__foo_example_net___foo_tokeninfo__service2":  "http://5.6.7.8:8181",
+			"kube_namespace1__pathroutes__foo_example2_net___foo_token__service1":     "http://1.2.3.4:8080",
+			"kube_namespace1__pathroutes__foo_example2_net___foo_tokeninfo__service2": "http://5.6.7.8:8181",
 		})
 	})
 
@@ -752,15 +794,19 @@ func TestIngress(t *testing.T) {
 		}
 
 		checkRoutes(t, r, map[string]string{
-			"kube_namespace1__default_only______":                           "http://1.2.3.4:8080",
-			"kube_namespace2__path_rule_only__www_example_org_____service3": "http://9.0.1.2:7272",
-			"kube_namespace1__mega______":                                   "http://1.2.3.4:8080",
-			"kube_namespace1__mega__foo_example_org___test1__service1":      "http://1.2.3.4:8080",
-			"kube_namespace1__mega__foo_example_org___test2__service2":      "http://5.6.7.8:8181",
-			"kube_namespace1__mega__foo_example_org____":                    "",
-			"kube_namespace1__mega__bar_example_org___test1__service1":      "http://1.2.3.4:8080",
-			"kube_namespace1__mega__bar_example_org___test2__service2":      "http://5.6.7.8:8181",
-			"kube_namespace1__mega__bar_example_org____":                    "",
+			"kube_namespace1__default_only______":                                     "http://1.2.3.4:8080",
+			"kube_namespace2__path_rule_only__www_example_org_____service3":           "http://9.0.1.2:7272",
+			"kube_namespace1__mega______":                                             "http://1.2.3.4:8080",
+			"kube_namespace1__mega__foo_example_org___test1__service1":                "http://1.2.3.4:8080",
+			"kube_namespace1__mega__foo_example_org___test2__service2":                "http://5.6.7.8:8181",
+			"kube_namespace1__mega__foo_example_org____":                              "",
+			"kube_namespace1__mega__bar_example_org___test1__service1":                "http://1.2.3.4:8080",
+			"kube_namespace1__mega__bar_example_org___test2__service2":                "http://5.6.7.8:8181",
+			"kube_namespace1__mega__bar_example_org____":                              "",
+			"kube_namespace1__pathroutes__foo_example_net___foo_token__service1":      "http://1.2.3.4:8080",
+			"kube_namespace1__pathroutes__foo_example_net___foo_tokeninfo__service2":  "http://5.6.7.8:8181",
+			"kube_namespace1__pathroutes__foo_example2_net___foo_token__service1":     "http://1.2.3.4:8080",
+			"kube_namespace1__pathroutes__foo_example2_net___foo_tokeninfo__service2": "http://5.6.7.8:8181",
 		})
 	})
 
@@ -853,6 +899,10 @@ func TestIngress(t *testing.T) {
 			"kube_namespace1__mega__bar_example_org___test1__service1",
 			"kube_namespace1__mega__bar_example_org___test2__service2",
 			"kube_namespace1__mega__bar_example_org____",
+			"kube_namespace1__pathroutes__foo_example_net___foo_token__service1",
+			"kube_namespace1__pathroutes__foo_example_net___foo_tokeninfo__service2",
+			"kube_namespace1__pathroutes__foo_example2_net___foo_token__service1",
+			"kube_namespace1__pathroutes__foo_example2_net___foo_tokeninfo__service2",
 		)
 	})
 
@@ -1424,16 +1474,20 @@ func TestHealthcheckReload(t *testing.T) {
 
 		checkHealthcheck(t, r, true, true)
 		checkRoutes(t, r, map[string]string{
-			healthcheckRouteID:                                              "",
-			"kube_namespace1__default_only______":                           "http://1.2.3.4:8080",
-			"kube_namespace2__path_rule_only__www_example_org_____service3": "http://9.0.1.2:7272",
-			"kube_namespace1__mega______":                                   "http://1.2.3.4:8080",
-			"kube_namespace1__mega__foo_example_org___test1__service1":      "http://1.2.3.4:8080",
-			"kube_namespace1__mega__foo_example_org___test2__service2":      "http://5.6.7.8:8181",
-			"kube_namespace1__mega__foo_example_org____":                    "",
-			"kube_namespace1__mega__bar_example_org___test1__service1":      "http://1.2.3.4:8080",
-			"kube_namespace1__mega__bar_example_org___test2__service2":      "http://5.6.7.8:8181",
-			"kube_namespace1__mega__bar_example_org____":                    "",
+			healthcheckRouteID:                                                        "",
+			"kube_namespace1__default_only______":                                     "http://1.2.3.4:8080",
+			"kube_namespace2__path_rule_only__www_example_org_____service3":           "http://9.0.1.2:7272",
+			"kube_namespace1__mega______":                                             "http://1.2.3.4:8080",
+			"kube_namespace1__mega__foo_example_org___test1__service1":                "http://1.2.3.4:8080",
+			"kube_namespace1__mega__foo_example_org___test2__service2":                "http://5.6.7.8:8181",
+			"kube_namespace1__mega__foo_example_org____":                              "",
+			"kube_namespace1__mega__bar_example_org___test1__service1":                "http://1.2.3.4:8080",
+			"kube_namespace1__mega__bar_example_org___test2__service2":                "http://5.6.7.8:8181",
+			"kube_namespace1__mega__bar_example_org____":                              "",
+			"kube_namespace1__pathroutes__foo_example_net___foo_token__service1":      "http://1.2.3.4:8080",
+			"kube_namespace1__pathroutes__foo_example_net___foo_tokeninfo__service2":  "http://5.6.7.8:8181",
+			"kube_namespace1__pathroutes__foo_example2_net___foo_token__service1":     "http://1.2.3.4:8080",
+			"kube_namespace1__pathroutes__foo_example2_net___foo_tokeninfo__service2": "http://5.6.7.8:8181",
 		})
 	})
 }
