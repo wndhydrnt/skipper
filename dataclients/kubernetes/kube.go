@@ -428,6 +428,7 @@ func (c *Client) convertPathRule(ns, name, host string, prule *pathRule, service
 // - check how to set failures in ingress status
 func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 	routes := make([]*eskip.Route, 0, len(items))
+	catchAllSet := make(map[string]bool)
 	for _, i := range items {
 		if i.Metadata == nil || i.Metadata.Namespace == "" || i.Metadata.Name == "" ||
 			i.Spec == nil {
@@ -492,12 +493,17 @@ func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 			// if routes were configured, but there is no catchall route defined,
 			// create a route which returns 404
 			if len(hostRoutes) > 0 && !catchAllRoutes(hostRoutes) {
-				catchAll := &eskip.Route{
-					Id:          routeID(i.Metadata.Namespace, i.Metadata.Name, rule.Host, "", ""),
-					HostRegexps: host,
-					BackendType: eskip.ShuntBackend,
+				id := routeID(i.Metadata.Namespace, i.Metadata.Name, rule.Host, "", "")
+				if !catchAllSet[id] {
+					catchAllSet[id] = true
+					catchAll := &eskip.Route{
+						Id:          id,
+						HostRegexps: host,
+						BackendType: eskip.ShuntBackend,
+					}
+					routes = append(routes, catchAll)
 				}
-				routes = append(routes, catchAll)
+
 			}
 		}
 	}

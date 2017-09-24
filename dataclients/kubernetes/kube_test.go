@@ -164,7 +164,7 @@ func testIngresses() []*ingressItem {
 			1.0,
 			testRule(
 				"foo.example.net",
-				testPathRule("/foo/tokeninfo", "service2", backendPort{"port1"}),
+				testPathRule("/foo/tokeninfo", "service2", backendPort{"port2"}),
 			),
 		),
 		testIngress(
@@ -179,7 +179,7 @@ func testIngresses() []*ingressItem {
 			),
 			testRule(
 				"foo.example2.net",
-				testPathRule("/foo/tokeninfo", "service2", backendPort{"port1"}),
+				testPathRule("/foo/tokeninfo", "service2", backendPort{"port2"}),
 			),
 		),
 	}
@@ -747,8 +747,10 @@ func TestIngress(t *testing.T) {
 			"kube_namespace1__mega__bar_example_org____":                              "",
 			"kube_namespace1__pathroutes__foo_example_net___foo_token__service1":      "http://1.2.3.4:8080",
 			"kube_namespace1__pathroutes__foo_example_net___foo_tokeninfo__service2":  "http://5.6.7.8:8181",
+			"kube_namespace1__pathroutes__foo_example_net____":                        "",
 			"kube_namespace1__pathroutes__foo_example2_net___foo_token__service1":     "http://1.2.3.4:8080",
 			"kube_namespace1__pathroutes__foo_example2_net___foo_tokeninfo__service2": "http://5.6.7.8:8181",
+			"kube_namespace1__pathroutes__foo_example2_net____":                       "",
 		})
 	})
 
@@ -805,8 +807,10 @@ func TestIngress(t *testing.T) {
 			"kube_namespace1__mega__bar_example_org____":                              "",
 			"kube_namespace1__pathroutes__foo_example_net___foo_token__service1":      "http://1.2.3.4:8080",
 			"kube_namespace1__pathroutes__foo_example_net___foo_tokeninfo__service2":  "http://5.6.7.8:8181",
+			"kube_namespace1__pathroutes__foo_example_net____":                        "",
 			"kube_namespace1__pathroutes__foo_example2_net___foo_token__service1":     "http://1.2.3.4:8080",
 			"kube_namespace1__pathroutes__foo_example2_net___foo_tokeninfo__service2": "http://5.6.7.8:8181",
+			"kube_namespace1__pathroutes__foo_example2_net____":                       "",
 		})
 	})
 
@@ -858,12 +862,13 @@ func TestIngress(t *testing.T) {
 		if err != nil || len(r) != 0 {
 			t.Error("failed to receive delete", err, len(r))
 		}
-
 		checkIDs(
 			t,
 			d,
 			"kube_namespace1__mega__foo_example_org___test2__service2",
 			"kube_namespace1__mega__bar_example_org___test2__service2",
+			"kube_namespace1__pathroutes__foo_example_net___foo_tokeninfo__service2",
+			"kube_namespace1__pathroutes__foo_example2_net___foo_tokeninfo__service2",
 		)
 	})
 
@@ -901,8 +906,10 @@ func TestIngress(t *testing.T) {
 			"kube_namespace1__mega__bar_example_org____",
 			"kube_namespace1__pathroutes__foo_example_net___foo_token__service1",
 			"kube_namespace1__pathroutes__foo_example_net___foo_tokeninfo__service2",
+			"kube_namespace1__pathroutes__foo_example_net____",
 			"kube_namespace1__pathroutes__foo_example2_net___foo_token__service1",
 			"kube_namespace1__pathroutes__foo_example2_net___foo_tokeninfo__service2",
+			"kube_namespace1__pathroutes__foo_example2_net____",
 		)
 	})
 
@@ -1486,8 +1493,10 @@ func TestHealthcheckReload(t *testing.T) {
 			"kube_namespace1__mega__bar_example_org____":                              "",
 			"kube_namespace1__pathroutes__foo_example_net___foo_token__service1":      "http://1.2.3.4:8080",
 			"kube_namespace1__pathroutes__foo_example_net___foo_tokeninfo__service2":  "http://5.6.7.8:8181",
+			"kube_namespace1__pathroutes__foo_example_net____":                        "",
 			"kube_namespace1__pathroutes__foo_example2_net___foo_token__service1":     "http://1.2.3.4:8080",
 			"kube_namespace1__pathroutes__foo_example2_net___foo_tokeninfo__service2": "http://5.6.7.8:8181",
+			"kube_namespace1__pathroutes__foo_example2_net____":                       "",
 		})
 	})
 }
