@@ -80,6 +80,10 @@ func testRule(host string, paths ...*pathRule) *rule {
 	}
 }
 
+func testIngressWithoutAnnotation(ns, name, defaultService string, defaultPort backendPort, traffic float64, rules ...*rule) *ingressItem {
+	return testIngress(ns, name, defaultService, "", "", "", defaultPort, traffic, rules...)
+}
+
 func testIngress(ns, name, defaultService, ratelimitCfg, filterString, predicateString string, defaultPort backendPort, traffic float64, rules ...*rule) *ingressItem {
 	var defaultBackend *backend
 	if len(defaultService) != 0 {
@@ -132,13 +136,10 @@ func testServices() services {
 
 func testIngresses() []*ingressItem {
 	return []*ingressItem{
-		testIngress("namespace1", "default-only", "service1", "", "", "", backendPort{8080}, 1.0),
-		testIngress(
+		testIngressWithoutAnnotation("namespace1", "default-only", "service1", backendPort{8080}, 1.0),
+		testIngressWithoutAnnotation(
 			"namespace2",
 			"path-rule-only",
-			"",
-			"",
-			"",
 			"",
 			backendPort{},
 			1.0,
@@ -147,13 +148,10 @@ func testIngresses() []*ingressItem {
 				testPathRule("/", "service3", backendPort{"port3"}),
 			),
 		),
-		testIngress(
+		testIngressWithoutAnnotation(
 			"namespace1",
 			"mega",
 			"service1",
-			"",
-			"",
-			"",
 			backendPort{"port1"},
 			1.0,
 			testRule(
@@ -370,7 +368,7 @@ func TestIngressData(t *testing.T) {
 				"bar": testService("1.2.3.4", nil),
 			},
 		},
-		[]*ingressItem{testIngress("foo", "baz", "bar", "", "", "", backendPort{8080}, 1.0)},
+		[]*ingressItem{testIngressWithoutAnnotation("foo", "baz", "bar", backendPort{8080}, 1.0)},
 		map[string]string{
 			"kube_foo__baz______": "http://1.2.3.4:8080",
 		},
@@ -381,12 +379,9 @@ func TestIngressData(t *testing.T) {
 				"bar": testService("1.2.3.4", nil),
 			},
 		},
-		[]*ingressItem{testIngress(
+		[]*ingressItem{testIngressWithoutAnnotation(
 			"foo",
 			"baz",
-			"",
-			"",
-			"",
 			"",
 			backendPort{},
 			1.0,
@@ -410,13 +405,10 @@ func TestIngressData(t *testing.T) {
 				"baz": testService("5.6.7.8", nil),
 			},
 		},
-		[]*ingressItem{testIngress(
+		[]*ingressItem{testIngressWithoutAnnotation(
 			"foo",
 			"qux",
 			"bar",
-			"",
-			"",
-			"",
 			backendPort{8080},
 			1.0,
 			testRule(
@@ -439,12 +431,9 @@ func TestIngressData(t *testing.T) {
 				"bar": testService("1.2.3.4", map[string]int{"baz": 8181}),
 			},
 		},
-		[]*ingressItem{testIngress(
+		[]*ingressItem{testIngressWithoutAnnotation(
 			"foo",
 			"qux",
-			"",
-			"",
-			"",
 			"",
 			backendPort{},
 			1.0,
@@ -468,12 +457,9 @@ func TestIngressData(t *testing.T) {
 			},
 		},
 		[]*ingressItem{
-			testIngress(
+			testIngressWithoutAnnotation(
 				"foo",
 				"qux",
-				"",
-				"",
-				"",
 				"",
 				backendPort{},
 				1.0,
@@ -944,12 +930,9 @@ func TestIngress(t *testing.T) {
 
 		api.ingresses.Items = append(
 			api.ingresses.Items,
-			testIngress(
+			testIngressWithoutAnnotation(
 				"namespace1",
 				"new1",
-				"",
-				"",
-				"",
 				"",
 				backendPort{""},
 				1.0,
@@ -958,12 +941,9 @@ func TestIngress(t *testing.T) {
 					testPathRule("/", "service1", backendPort{"port1"}),
 				),
 			),
-			testIngress(
+			testIngressWithoutAnnotation(
 				"namespace1",
 				"new2",
-				"",
-				"",
-				"",
 				"",
 				backendPort{""},
 				1.0,
@@ -1002,12 +982,9 @@ func TestIngress(t *testing.T) {
 
 		api.ingresses.Items = append(
 			api.ingresses.Items,
-			testIngress(
+			testIngressWithoutAnnotation(
 				"namespace1",
 				"new1",
-				"",
-				"",
-				"",
 				"",
 				backendPort{""},
 				1.0,
@@ -1016,12 +993,9 @@ func TestIngress(t *testing.T) {
 					testPathRule("/", "service1", backendPort{"port1"}),
 				),
 			),
-			testIngress(
+			testIngressWithoutAnnotation(
 				"namespace1",
 				"new2",
-				"",
-				"",
-				"",
 				"",
 				backendPort{""},
 				1.0,
@@ -1069,12 +1043,9 @@ func TestIngress(t *testing.T) {
 			return
 		}
 
-		ti1 := testIngress(
+		ti1 := testIngressWithoutAnnotation(
 			"namespace1",
 			"new1",
-			"",
-			"",
-			"",
 			"",
 			backendPort{""},
 			1.0,
@@ -1083,12 +1054,9 @@ func TestIngress(t *testing.T) {
 				testPathRule("/", "service1", backendPort{"port1"}),
 			),
 		)
-		ti2 := testIngress(
+		ti2 := testIngressWithoutAnnotation(
 			"namespace1",
 			"new2",
-			"",
-			"",
-			"",
 			"",
 			backendPort{""},
 			1.0,
@@ -1135,12 +1103,9 @@ func TestConvertPathRule(t *testing.T) {
 
 		api.ingresses.Items = append(
 			api.ingresses.Items,
-			testIngress(
+			testIngressWithoutAnnotation(
 				"namespace1",
 				"new1",
-				"",
-				"",
-				"",
 				"",
 				backendPort{""},
 				1.0,
@@ -1149,12 +1114,9 @@ func TestConvertPathRule(t *testing.T) {
 					testPathRule("/test1", "service1", backendPort{"port1"}),
 				),
 			),
-			testIngress(
+			testIngressWithoutAnnotation(
 				"namespace1",
 				"new1",
-				"",
-				"",
-				"",
 				"",
 				backendPort{""},
 				1.0,
