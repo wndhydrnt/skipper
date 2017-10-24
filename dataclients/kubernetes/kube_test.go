@@ -165,8 +165,6 @@ func testIngresses() []*ingressItem {
 				testPathRule("/test2", "service2", backendPort{"port2"}),
 			),
 		),
-		testIngress("namespace1", "ratelimit", "service1", "localRatelimit(20,\"1m\")", "", "", backendPort{8080}, 1.0),
-		testIngress("namespace1", "ratelimitAndBreaker", "service1", "", "localRatelimit(20,\"1m\") -> consecutiveBreaker(15)", "", backendPort{8080}, 1.0),
 	}
 }
 
@@ -703,6 +701,8 @@ func TestIngress(t *testing.T) {
 
 	t.Run("has ingress but no according services, service gets created", func(t *testing.T) {
 		api.ingresses.Items = testIngresses()
+		api.ingresses.Items = append(api.ingresses.Items, testIngress("namespace1", "ratelimit", "service1", "localRatelimit(20,\"1m\")", "", "", backendPort{8080}, 1.0))
+		api.ingresses.Items = append(api.ingresses.Items, testIngress("namespace1", "ratelimitAndBreaker", "service1", "", "localRatelimit(20,\"1m\") -> consecutiveBreaker(15)", "", backendPort{8080}, 1.0))
 		dc, err := New(Options{KubernetesURL: api.server.URL})
 		if err != nil {
 			t.Error(err)
@@ -764,6 +764,8 @@ func TestIngress(t *testing.T) {
 	t.Run("has ingresses, receive initial", func(t *testing.T) {
 		api.services = testServices()
 		api.ingresses.Items = testIngresses()
+		api.ingresses.Items = append(api.ingresses.Items, testIngress("namespace1", "ratelimit", "service1", "localRatelimit(20,\"1m\")", "", "", backendPort{8080}, 1.0))
+		api.ingresses.Items = append(api.ingresses.Items, testIngress("namespace1", "ratelimitAndBreaker", "service1", "", "localRatelimit(20,\"1m\") -> consecutiveBreaker(15)", "", backendPort{8080}, 1.0))
 		dc, err := New(Options{KubernetesURL: api.server.URL})
 		if err != nil {
 			t.Error(err)
@@ -850,6 +852,9 @@ func TestIngress(t *testing.T) {
 	t.Run("has ingresses, delete some ingresses", func(t *testing.T) {
 		api.services = testServices()
 		api.ingresses.Items = testIngresses()
+		api.ingresses.Items = append(api.ingresses.Items, testIngress("namespace1", "ratelimit", "service1", "localRatelimit(20,\"1m\")", "", "", backendPort{8080}, 1.0))
+		api.ingresses.Items = append(api.ingresses.Items, testIngress("namespace1", "ratelimitAndBreaker", "service1", "", "localRatelimit(20,\"1m\") -> consecutiveBreaker(15)", "", backendPort{8080}, 1.0))
+
 		dc, err := New(Options{KubernetesURL: api.server.URL})
 		if err != nil {
 			t.Error(err)
@@ -1434,6 +1439,8 @@ func TestHealthcheckReload(t *testing.T) {
 	t.Run("use healthcheck, reload succeeds", func(t *testing.T) {
 		api.services = testServices()
 		api.ingresses.Items = testIngresses()
+		api.ingresses.Items = append(api.ingresses.Items, testIngress("namespace1", "ratelimit", "service1", "localRatelimit(20,\"1m\")", "", "", backendPort{8080}, 1.0))
+		api.ingresses.Items = append(api.ingresses.Items, testIngress("namespace1", "ratelimitAndBreaker", "service1", "", "localRatelimit(20,\"1m\") -> consecutiveBreaker(15)", "", backendPort{8080}, 1.0))
 
 		dc, err := New(Options{
 			KubernetesURL:      api.server.URL,
@@ -2114,6 +2121,7 @@ func TestRatelimits(t *testing.T) {
 	t.Run("check localratelimit", func(t *testing.T) {
 		api.services = testServices()
 		api.ingresses.Items = testIngresses()
+		api.ingresses.Items = append(api.ingresses.Items, testIngress("namespace1", "ratelimit", "service1", "localRatelimit(20,\"1m\")", "", "", backendPort{8080}, 1.0))
 
 		dc, err := New(Options{
 			KubernetesURL: api.server.URL,
@@ -2156,6 +2164,7 @@ func TestSkipperFilter(t *testing.T) {
 	t.Run("check ingress filter", func(t *testing.T) {
 		api.services = testServices()
 		api.ingresses.Items = testIngresses()
+		api.ingresses.Items = append(api.ingresses.Items, testIngress("namespace1", "ratelimitAndBreaker", "service1", "", "localRatelimit(20,\"1m\") -> consecutiveBreaker(15)", "", backendPort{8080}, 1.0))
 
 		dc, err := New(Options{
 			KubernetesURL: api.server.URL,
