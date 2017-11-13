@@ -2,21 +2,37 @@ package args
 
 import "errors"
 
-var (
-	ErrInvalidArgs = errors.New("invalid args")
-
-	errArgPositionType     = errors.New("last argument must be of type []interface{} or nil")
-	errNotSupportedArgType = errors.New("not supported capture type")
-	errVariadicNotLast     = errors.New("variadic must be the last arg")
-	errInvalidEnum         = errors.New("invalid enum")
-)
-
 type enum struct {
 	options    []string
 	valid      bool
 	isVariadic bool
 	p          interface{}
 }
+
+type optional struct {
+	p interface{}
+}
+
+type captureFlags int
+
+const (
+	none    captureFlags = 0
+	hasArgs captureFlags = 1 << iota
+	expectingOptional
+	expectingSingle
+	lastPosition
+	varargsConsumed
+)
+
+var (
+	ErrInvalidArgs = errors.New("invalid args")
+
+	errArgPositionType          = errors.New("last argument must be of type []interface{} or nil")
+	errNotSupportedCaptureType  = errors.New("not supported capture type")
+	errNotVariadicPosition      = errors.New("variadic must be the last arg")
+	errInvalidEnum              = errors.New("invalid enum")
+	errExpetingOptionalOrVararg = errors.New("expecting optional or vararg")
+)
 
 func splitArgs(a []interface{}) (captures []interface{}, args []interface{}, err error) {
 	if len(a) == 0 {
@@ -41,28 +57,28 @@ func splitArgs(a []interface{}) (captures []interface{}, args []interface{}, err
 	return
 }
 
-func validateCapture(capture interface{}, lastCapture, hasArg bool) error {
+func validateCapture(capture interface{}, f captureFlags) error {
 	switch p := capture.(type) {
 	case *int, *float64, *string:
-		if !hasArg {
+		if f&expectingOptional != 0 {
+			return errExpetingOptionalOrVararg
+		}
+
+		if f&hasArgs == 0 {
 			return ErrInvalidArgs
 		}
 	case *[]int, *[]float64, *[]string, *[]interface{}:
-		if !lastCapture {
-			return errVariadicNotLast
+		if f&expectingSingle != 0 || f&lastPosition == 0 {
+			return errNotVariadicPosition
 		}
 	case enum:
 		if !p.valid {
 			return errInvalidEnum
 		}
 
-		if p.isVariadic && !lastCapture {
-			return ErrInvalidArgs
-		}
-
-		if !p.isVariadic && !hasArg {
-			return ErrInvalidArgs
-		}
+		return validateCapture(p.p, f)
+	case optional:
+		return validateCapture(p.p, f&^expectingOptional|expectingSingle)
 	}
 
 	return nil
@@ -184,6 +200,45 @@ func captureMixed(a []interface{}) ([]interface{}, error) {
 	return mixed, nil
 }
 
+func captureArg(capture interface{}, a []interface{}, f captureFlags) (nextFlags captureFlags, err error) {
+	nextFlags = f
+
+	switch p := capture.(type) {
+	case *int:
+		*p, err = captureInt(a[0])
+	case *float64:
+		*p, err = captureFloat(a[0])
+	case *string:
+		*p, err = captureString(a[0])
+	case *[]int:
+		*p, err = captureInts(a)
+		nextFlags |= varargsConsumed
+	case *[]float64:
+		*p, err = captureFloats(a)
+		nextFlags |= varargsConsumed
+	case *[]string:
+		*p, err = captureStrings(a)
+		nextFlags |= varargsConsumed
+	case *[]interface{}:
+		*p, err = captureMixed(a)
+		nextFlags |= varargsConsumed
+	case enum:
+		if p.isVariadic {
+			*p.p.(*[]string), err = captureEnums(p.options, a)
+			nextFlags |= varargsConsumed
+		} else {
+			*p.p.(*string), err = captureEnum(p.options, a[0])
+		}
+	case optional:
+		nextFlags, err = captureArg(p.p, a, f)
+		nextFlags |= expectingOptional
+	default:
+		err = errNotSupportedCaptureType
+	}
+
+	return
+}
+
 func Capture(a ...interface{}) error {
 	captures, args, err := splitArgs(a)
 	if err != nil {
@@ -199,55 +254,29 @@ func Capture(a ...interface{}) error {
 	}
 
 	var (
-		index           int
-		capture         interface{}
-		varargsConsumed bool
+		index   int
+		capture interface{}
 	)
-
+	f := hasArgs
 	for index, capture = range captures {
-		isLast := index == len(captures)-1
-		hasArg := len(args) > index
-		if err := validateCapture(capture, isLast, hasArg); err != nil {
+		if len(args) == index {
+			f = f &^ hasArgs
+		}
+
+		if index == len(captures)-1 {
+			f |= lastPosition
+		}
+
+		if err := validateCapture(capture, f); err != nil {
 			return err
 		}
 
-		var err error
-		switch p := capture.(type) {
-		case *int:
-			*p, err = captureInt(args[index])
-		case *float64:
-			*p, err = captureFloat(args[index])
-		case *string:
-			*p, err = captureString(args[index])
-		case *[]int:
-			*p, err = captureInts(args[index:])
-			varargsConsumed = true
-		case *[]float64:
-			*p, err = captureFloats(args[index:])
-			varargsConsumed = true
-		case *[]string:
-			*p, err = captureStrings(args[index:])
-			varargsConsumed = true
-		case *[]interface{}:
-			*p, err = captureMixed(args[index:])
-			varargsConsumed = true
-		case enum:
-			if p.isVariadic {
-				*p.p.(*[]string), err = captureEnums(p.options, args[index:])
-				varargsConsumed = true
-			} else {
-				*p.p.(*string), err = captureEnum(p.options, args[index])
-			}
-		default:
-			err = errNotSupportedArgType
-		}
-
-		if err != nil {
+		if f, err = captureArg(capture, args[index:], f); err != nil {
 			return err
 		}
 	}
 
-	if !varargsConsumed && index+1 < len(args) {
+	if f&varargsConsumed == 0 && index+1 < len(args) {
 		return ErrInvalidArgs
 	}
 
@@ -255,16 +284,27 @@ func Capture(a ...interface{}) error {
 }
 
 func Enum(a interface{}, options ...string) interface{} {
-	e := enum{options: options}
 	switch p := a.(type) {
 	case *string:
-		e.valid = true
-		e.p = p
+		return enum{
+			options: options,
+			valid:   true,
+			p:       p,
+		}
 	case *[]string:
-		e.valid = true
-		e.isVariadic = true
-		e.p = p
+		return enum{
+			options:    options,
+			valid:      true,
+			isVariadic: true,
+			p:          p,
+		}
+	case optional:
+		return Optional(Enum(p.p, options...))
+	default:
+		return enum{}
 	}
+}
 
-	return e
+func Optional(a interface{}) interface{} {
+	return optional{a}
 }

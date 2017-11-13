@@ -462,3 +462,102 @@ func TestVariadicArgs(t *testing.T) {
 		expectedMixed,
 	)
 }
+
+func TestOptionalArgs(t *testing.T) {
+	t.Run("no optional", func(t *testing.T) {
+		var (
+			a int
+			b string
+		)
+
+		if err := Capture(&a, &b, []interface{}{42, "foo"}); err != nil {
+			t.Error(err)
+		}
+	})
+
+	t.Run("non-optional after optional", func(t *testing.T) {
+		var (
+			a int
+			b string
+			c string
+		)
+
+		if err := Capture(&a, Optional(&b), Enum(&c, "true", "false"), []interface{}{
+			42,
+			"foo",
+			"true",
+		}); err == nil {
+			t.Error("failed to fail")
+		}
+	})
+
+	t.Run("optional args", func(t *testing.T) {
+		var (
+			a int
+			b string
+			c string
+		)
+
+		if err := Capture(&a, Optional(&b), Optional(&c), []interface{}{
+			42,
+			"foo",
+			"bar",
+		}); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if a != 42 || b != "foo" || c != "bar" {
+			t.Error("failed to capture args", a, b, c, 42, "foo", "bar")
+		}
+	})
+
+	t.Run("optional arg as variadic", func(t *testing.T) {
+		var (
+			a int
+			b []string
+		)
+
+		if err := Capture(&a, Optional(&b), []interface{}{42, "foo", "bar"}); err == nil {
+			t.Error("failed to fail")
+		}
+	})
+
+	t.Run("optional as enum", func(t *testing.T) {
+		var (
+			a int
+			b string
+		)
+
+		if err := Capture(&a, Enum(Optional(&b), "true", "false"), []interface{}{
+			42,
+			"true",
+		}); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if a != 42 || b != "true" {
+			t.Error("failed to capture args", a, b, 42, "true")
+		}
+	})
+
+	t.Run("enum as optional", func(t *testing.T) {
+		var (
+			a int
+			b string
+		)
+
+		if err := Capture(&a, Optional(Enum(&b, "true", "false")), []interface{}{
+			42,
+			"true",
+		}); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if a != 42 || b != "true" {
+			t.Error("failed to capture args", a, b, 42, "true")
+		}
+	})
+}
