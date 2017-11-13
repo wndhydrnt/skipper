@@ -1,6 +1,10 @@
 package args
 
-import "errors"
+import (
+	"errors"
+	"log"
+	"time"
+)
 
 type enum struct {
 	options    []string
@@ -59,7 +63,7 @@ func splitArgs(a []interface{}) (captures []interface{}, args []interface{}, err
 
 func validateCapture(capture interface{}, f captureFlags) error {
 	switch p := capture.(type) {
-	case *int, *float64, *string:
+	case *int, *float64, *string, *time.Duration:
 		if f&expectingOptional != 0 {
 			return errExpetingOptionalOrVararg
 		}
@@ -67,7 +71,7 @@ func validateCapture(capture interface{}, f captureFlags) error {
 		if f&hasArgs == 0 {
 			return ErrInvalidArgs
 		}
-	case *[]int, *[]float64, *[]string, *[]interface{}:
+	case *[]int, *[]float64, *[]string, *[]time.Duration, *[]interface{}:
 		if f&expectingSingle != 0 || f&lastPosition == 0 {
 			return errNotVariadicPosition
 		}
@@ -186,6 +190,40 @@ func captureEnums(options []string, a []interface{}) ([]string, error) {
 	return enums, nil
 }
 
+func captureDuration(a interface{}) (time.Duration, error) {
+	switch v := a.(type) {
+	case int:
+		return time.Duration(v) * time.Millisecond, nil
+	case float64:
+		scale := float64(time.Millisecond) / float64(time.Nanosecond)
+		return time.Duration(v*scale) * time.Millisecond / time.Duration(scale), nil
+	case string:
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			return 0, ErrInvalidArgs
+		}
+
+		return d, nil
+	default:
+		return 0, ErrInvalidArgs
+	}
+}
+
+func captureDurations(a []interface{}) ([]time.Duration, error) {
+	var durations []time.Duration
+	for i := range a {
+		log.Println(a[i])
+		v, err := captureDuration(a[i])
+		if err != nil {
+			return nil, ErrInvalidArgs
+		}
+
+		durations = append(durations, v)
+	}
+
+	return durations, nil
+}
+
 func captureMixed(a []interface{}) ([]interface{}, error) {
 	var mixed []interface{}
 	for i := range a {
@@ -210,6 +248,8 @@ func captureArg(capture interface{}, a []interface{}, f captureFlags) (nextFlags
 		*p, err = captureFloat(a[0])
 	case *string:
 		*p, err = captureString(a[0])
+	case *time.Duration:
+		*p, err = captureDuration(a[0])
 	case *[]int:
 		*p, err = captureInts(a)
 		nextFlags |= varargsConsumed
@@ -218,6 +258,9 @@ func captureArg(capture interface{}, a []interface{}, f captureFlags) (nextFlags
 		nextFlags |= varargsConsumed
 	case *[]string:
 		*p, err = captureStrings(a)
+		nextFlags |= varargsConsumed
+	case *[]time.Duration:
+		*p, err = captureDurations(a)
 		nextFlags |= varargsConsumed
 	case *[]interface{}:
 		*p, err = captureMixed(a)

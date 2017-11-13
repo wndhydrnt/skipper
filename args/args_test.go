@@ -3,6 +3,7 @@ package args
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/sanity-io/litter"
 )
@@ -35,16 +36,18 @@ func TestNoArgsExpected(t *testing.T) {
 
 func TestFixedArgs(t *testing.T) {
 	var (
-		oneInt    int
-		oneFloat  float64
-		oneString string
-		oneEnum   string
+		oneInt      int
+		oneFloat    float64
+		oneString   string
+		oneEnum     string
+		oneDuration time.Duration
 
 		expected = []interface{}{
 			42,
 			3.0,
 			"foo",
 			"red",
+			3 * time.Second,
 		}
 	)
 
@@ -54,12 +57,14 @@ func TestFixedArgs(t *testing.T) {
 			oneFloat = 0
 			oneString = ""
 			oneEnum = ""
+			oneDuration = 0
 
 			err := Capture(
 				&oneInt,
 				&oneFloat,
 				&oneString,
 				Enum(&oneEnum, "red", "green", "blue"),
+				&oneDuration,
 				args,
 			)
 
@@ -82,6 +87,7 @@ func TestFixedArgs(t *testing.T) {
 				oneFloat,
 				oneString,
 				oneEnum,
+				oneDuration,
 			}
 
 			if !reflect.DeepEqual(got, expected) {
@@ -103,6 +109,7 @@ func TestFixedArgs(t *testing.T) {
 		3.0,
 		"foo",
 		"red",
+		"3s",
 		"bar",
 	})
 
@@ -111,6 +118,7 @@ func TestFixedArgs(t *testing.T) {
 		3.0,
 		"foo",
 		"red",
+		"3s",
 	})
 
 	run("wrong type, not float", false, []interface{}{
@@ -118,6 +126,7 @@ func TestFixedArgs(t *testing.T) {
 		"not a number",
 		"foo",
 		"red",
+		"3s",
 	})
 
 	run("wrong type, not string", false, []interface{}{
@@ -125,6 +134,7 @@ func TestFixedArgs(t *testing.T) {
 		3.0,
 		2,
 		"red",
+		"3s",
 	})
 
 	run("wrong enum, not string", false, []interface{}{
@@ -132,6 +142,7 @@ func TestFixedArgs(t *testing.T) {
 		3.0,
 		"foo",
 		42,
+		"3s",
 	})
 
 	run("wrong enum", false, []interface{}{
@@ -139,6 +150,15 @@ func TestFixedArgs(t *testing.T) {
 		3.0,
 		"foo",
 		"cyan",
+		"3s",
+	})
+
+	run("wrong type, not duration", false, []interface{}{
+		42,
+		3.0,
+		"foo",
+		"red",
+		"bar",
 	})
 
 	run("pass", true, []interface{}{
@@ -146,13 +166,15 @@ func TestFixedArgs(t *testing.T) {
 		3.0,
 		"foo",
 		"red",
+		"3s",
 	})
 
-	run("pass, convert int to foat", true, []interface{}{
+	run("pass, convert int to float", true, []interface{}{
 		42,
 		3,
 		"foo",
 		"red",
+		"3s",
 	})
 
 	run("pass, convert float to int", true, []interface{}{
@@ -160,6 +182,23 @@ func TestFixedArgs(t *testing.T) {
 		3.0,
 		"foo",
 		"red",
+		"3s",
+	})
+
+	run("pass, duration as milliseconds", true, []interface{}{
+		42,
+		3.0,
+		"foo",
+		"red",
+		3000,
+	})
+
+	run("pass, duration as float milliseconds", true, []interface{}{
+		42,
+		3.0,
+		"foo",
+		"red",
+		3000.0,
 	})
 }
 
@@ -228,11 +267,12 @@ func TestVariadicArgs(t *testing.T) {
 		oneInt    int
 		oneString string
 
-		someInts    []int
-		someFloats  []float64
-		someStrings []string
-		someEnums   []string
-		someMixed   []interface{}
+		someInts      []int
+		someFloats    []float64
+		someStrings   []string
+		someEnums     []string
+		someDurations []time.Duration
+		someMixed     []interface{}
 
 		captureFixed = []interface{}{
 			&oneInt,
@@ -253,7 +293,8 @@ func TestVariadicArgs(t *testing.T) {
 			),
 		)
 
-		captureMixed = append(captureFixed, &someMixed)
+		captureDurations = append(captureFixed, &someDurations)
+		captureMixed     = append(captureFixed, &someMixed)
 
 		argsFixed = []interface{}{
 			42,
@@ -264,13 +305,22 @@ func TestVariadicArgs(t *testing.T) {
 		argsFloats  = append(argsFixed, 1.41, 2.71, 3.14)
 		argsStrings = append(argsFixed, "foo", "bar", "baz")
 		argsEnums   = append(argsFixed, "green", "blue", "red")
-		argsMixed   = append(argsFixed, 42, 3.14, "foo")
 
-		expectedInts    = append(argsFixed, argsInts[len(argsFixed):])
-		expectedFloats  = append(argsFixed, argsFloats[len(argsFixed):])
-		expectedStrings = append(argsFixed, argsStrings[len(argsFixed):])
-		expectedEnums   = append(argsFixed, argsEnums[len(argsFixed):])
-		expectedMixed   = append(argsFixed, argsMixed[len(argsFixed):])
+		argsDurations = append(
+			argsFixed,
+			time.Hour.String(),
+			time.Minute.String(),
+			time.Second.String(),
+		)
+
+		argsMixed = append(argsFixed, 42, 3.14, "foo")
+
+		expectedInts      = append(argsFixed, argsInts[len(argsFixed):])
+		expectedFloats    = append(argsFixed, argsFloats[len(argsFixed):])
+		expectedStrings   = append(argsFixed, argsStrings[len(argsFixed):])
+		expectedEnums     = append(argsFixed, argsEnums[len(argsFixed):])
+		expectedDurations = append(argsFixed, argsDurations[len(argsFixed):])
+		expectedMixed     = append(argsFixed, argsMixed[len(argsFixed):])
 	)
 
 	run := func(
@@ -444,6 +494,22 @@ func TestVariadicArgs(t *testing.T) {
 		captureEnums,
 		argsEnums,
 		expectedEnums,
+	)
+
+	run(
+		"fail, not duration",
+		false,
+		captureDurations,
+		append(argsFixed, "3s", "not duration"),
+		nil,
+	)
+
+	run(
+		"pass, duration",
+		true,
+		captureDurations,
+		argsDurations,
+		expectedDurations,
 	)
 
 	run(
