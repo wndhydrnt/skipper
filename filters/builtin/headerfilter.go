@@ -15,8 +15,10 @@
 package builtin
 
 import (
-	"github.com/zalando/skipper/filters"
 	"strings"
+
+	"github.com/zalando/skipper/args"
+	"github.com/zalando/skipper/filters"
 )
 
 type headerType int
@@ -41,32 +43,20 @@ type headerFilter struct {
 }
 
 // verifies that the filter config has two string parameters
-func headerFilterConfig(typ headerType, config []interface{}) (string, string, error) {
+func headerFilterConfig(typ headerType, a []interface{}) (string, string, error) {
+	var key, value string
+	capture := []interface{}{&key}
+
 	switch typ {
 	case dropRequestHeader, dropResponseHeader:
-		if len(config) != 1 {
-			return "", "", filters.ErrInvalidFilterParameters
-		}
 	default:
-		if len(config) != 2 {
-			return "", "", filters.ErrInvalidFilterParameters
-		}
+		capture = append(capture, &value)
 	}
 
-	key, ok := config[0].(string)
-	if !ok {
-		return "", "", filters.ErrInvalidFilterParameters
-	}
+	capture = append(capture, a)
+	err := args.Capture(capture...)
 
-	var value string
-	if len(config) == 2 {
-		value, ok = config[1].(string)
-		if !ok {
-			return "", "", filters.ErrInvalidFilterParameters
-		}
-	}
-
-	return key, value, nil
+	return key, value, err
 }
 
 // Deprecated: use setRequestHeader or appendRequestHeader

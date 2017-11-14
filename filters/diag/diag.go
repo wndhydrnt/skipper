@@ -14,6 +14,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/zalando/skipper/args"
 	"github.com/zalando/skipper/filters"
 	"github.com/zalando/skipper/filters/serve"
 )
@@ -114,16 +115,13 @@ func NewBackendChunks() filters.Spec { return &throttle{typ: backendChunks} }
 
 func (r *random) Name() string { return RandomName }
 
-func (r *random) CreateFilter(args []interface{}) (filters.Filter, error) {
-	if len(args) != 1 {
-		return nil, filters.ErrInvalidFilterParameters
+func (r *random) CreateFilter(a []interface{}) (filters.Filter, error) {
+	var l int
+	if err := args.Capture(&l, a); err != nil {
+		return nil, err
 	}
 
-	if l, ok := args[0].(float64); ok {
-		return &random{int(l)}, nil
-	} else {
-		return nil, filters.ErrInvalidFilterParameters
-	}
+	return &random{l}, nil
 }
 
 func (r *random) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
@@ -194,44 +192,52 @@ func parseDuration(v interface{}) (time.Duration, error) {
 	return d, nil
 }
 
-func parseLatencyArgs(args []interface{}) (int, time.Duration, error) {
-	if len(args) != 1 {
-		return 0, 0, filters.ErrInvalidFilterParameters
+func parseLatencyArgs(a []interface{}) (time.Duration, error) {
+	var d time.Duration
+	err := args.Capture(&d, a)
+	if d < 0 {
+		return 0, args.ErrInvalidArgs
 	}
 
-	d, err := parseDuration(args[0])
-	return 0, d, err
+	return d, err
 }
 
-func parseBandwidthArgs(args []interface{}) (int, time.Duration, error) {
-	if len(args) != 1 {
-		return 0, 0, filters.ErrInvalidFilterParameters
+func parseBandwidthArgs(a []interface{}) (time.Duration, error) {
+	var kbps float64
+	if err := args.Capture(&kbps, a); err != nil {
+		return 0, err
 	}
 
-	kbps, ok := args[0].(float64)
-	if !ok || kbps <= 0 {
-		return 0, 0, filters.ErrInvalidFilterParameters
+	if kbps <= 0 {
+		return 0, args.ErrInvalidArgs
 	}
 
 	bpms := kbps2bpms(kbps)
-	return defaultChunkSize, time.Duration(float64(defaultChunkSize)/bpms) * time.Millisecond, nil
+	return time.Duration(float64(defaultChunkSize)/bpms) * time.Millisecond, nil
 }
 
-func parseChunksArgs(args []interface{}) (int, time.Duration, error) {
-	if len(args) != 2 {
-		return 0, 0, filters.ErrInvalidFilterParameters
+func parseChunksArgs(a []interface{}) (int, time.Duration, error) {
+	var (
+		size int
+		d    time.Duration
+	)
+
+	if err := args.Capture(&size, &d, a); err != nil {
+		return 0, 0, err
 	}
 
-	size, ok := args[0].(float64)
-	if !ok || size <= 0 {
-		return 0, 0, filters.ErrInvalidFilterParameters
+	if size <= 0 {
+		return 0, 0, args.ErrInvalidArgs
 	}
 
-	d, err := parseDuration(args[1])
-	return int(size), d, err
+	if d < 0 {
+		return 0, 0, args.ErrInvalidArgs
+	}
+
+	return size, d, nil
 }
 
-func (t *throttle) CreateFilter(args []interface{}) (filters.Filter, error) {
+func (t *throttle) CreateFilter(a []interface{}) (filters.Filter, error) {
 	var (
 		chunkSize int
 		delay     time.Duration
@@ -240,11 +246,12 @@ func (t *throttle) CreateFilter(args []interface{}) (filters.Filter, error) {
 
 	switch t.typ {
 	case latency, backendLatency:
-		chunkSize, delay, err = parseLatencyArgs(args)
+		delay, err = parseLatencyArgs(a)
 	case bandwidth, backendBandwidth:
-		chunkSize, delay, err = parseBandwidthArgs(args)
+		chunkSize = defaultChunkSize
+		delay, err = parseBandwidthArgs(a)
 	case chunks, backendChunks:
-		chunkSize, delay, err = parseChunksArgs(args)
+		chunkSize, delay, err = parseChunksArgs(a)
 	default:
 		panic("invalid throttle type")
 	}

@@ -1,6 +1,7 @@
 package builtin
 
 import (
+	"github.com/zalando/skipper/args"
 	"github.com/zalando/skipper/eskip"
 	"github.com/zalando/skipper/filters"
 )
@@ -68,32 +69,19 @@ func (spec *modQuery) Name() string {
 	}
 }
 
-func createDropQuery(config []interface{}) (filters.Filter, error) {
-	if len(config) != 1 {
-		return nil, filters.ErrInvalidFilterParameters
+func createDropQuery(a []interface{}) (filters.Filter, error) {
+	var template string
+	if err := args.Capture(&template, a); err != nil {
+		return nil, err
 	}
 
-	tpl, ok := config[0].(string)
-	if !ok {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
-	return &modQuery{behavior: drop, name: eskip.NewTemplate(tpl)}, nil
+	return &modQuery{behavior: drop, name: eskip.NewTemplate(template)}, nil
 }
 
-func createSetQuery(config []interface{}) (filters.Filter, error) {
-	if len(config) != 2 {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
-	name, ok := config[0].(string)
-	if !ok {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
-	value, ok := config[1].(string)
-	if !ok {
-		return nil, filters.ErrInvalidFilterParameters
+func createSetQuery(a []interface{}) (filters.Filter, error) {
+	var name, value string
+	if err := args.Capture(&name, &value, a); err != nil {
+		return nil, err
 	}
 
 	return &modQuery{behavior: set, name: eskip.NewTemplate(name), value: eskip.NewTemplate(value)}, nil

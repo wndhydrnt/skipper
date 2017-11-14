@@ -1,6 +1,9 @@
 package builtin
 
-import "github.com/zalando/skipper/filters"
+import (
+	"github.com/zalando/skipper/args"
+	"github.com/zalando/skipper/filters"
+)
 
 const (
 	requestCopyFilterName  = "requestCopyHeader"
@@ -46,26 +49,13 @@ func NewCopyResponseHeader() filters.Spec {
 
 func (s *copySpec) Name() string { return s.filterName }
 
-func (s *copySpec) CreateFilter(args []interface{}) (filters.Filter, error) {
-	if len(args) != 2 {
-		return nil, filters.ErrInvalidFilterParameters
+func (s *copySpec) CreateFilter(a []interface{}) (filters.Filter, error) {
+	f := copyFilter{typ: s.typ}
+	if err := args.Capture(&f.src, &f.dst, a); err != nil {
+		return nil, err
 	}
 
-	f := &copyFilter{typ: s.typ}
-
-	if value, ok := args[0].(string); ok {
-		f.src = value
-	} else {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
-	if value, ok := args[1].(string); ok {
-		f.dst = value
-	} else {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
-	return f, nil
+	return &f, nil
 }
 
 func (f copyFilter) Request(ctx filters.FilterContext) {

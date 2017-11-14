@@ -3,6 +3,7 @@ package builtin
 import (
 	"regexp"
 
+	"github.com/zalando/skipper/args"
 	"github.com/zalando/skipper/eskip"
 	"github.com/zalando/skipper/filters"
 )
@@ -61,19 +62,12 @@ func (spec *modPath) Name() string {
 	}
 }
 
-func createModPath(config []interface{}) (filters.Filter, error) {
-	if len(config) != 2 {
-		return nil, filters.ErrInvalidFilterParameters
-	}
+func createModPath(a []interface{}) (filters.Filter, error) {
+	f := modPath{behavior: regexpReplace}
 
-	expr, ok := config[0].(string)
-	if !ok {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
-	replacement, ok := config[1].(string)
-	if !ok {
-		return nil, filters.ErrInvalidFilterParameters
+	var expr string
+	if err := args.Capture(&expr, &f.replacement, a); err != nil {
+		return nil, err
 	}
 
 	rx, err := regexp.Compile(expr)
@@ -81,20 +75,17 @@ func createModPath(config []interface{}) (filters.Filter, error) {
 		return nil, err
 	}
 
-	return &modPath{behavior: regexpReplace, rx: rx, replacement: replacement}, nil
+	f.rx = rx
+	return &f, nil
 }
 
-func createSetPath(config []interface{}) (filters.Filter, error) {
-	if len(config) != 1 {
-		return nil, filters.ErrInvalidFilterParameters
+func createSetPath(a []interface{}) (filters.Filter, error) {
+	var template string
+	if err := args.Capture(&template, a); err != nil {
+		return nil, err
 	}
 
-	tpl, ok := config[0].(string)
-	if !ok {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
-	return &modPath{behavior: fullReplace, template: eskip.NewTemplate(tpl)}, nil
+	return &modPath{behavior: fullReplace, template: eskip.NewTemplate(template)}, nil
 }
 
 // Creates instances of the modPath filter.

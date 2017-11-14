@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zalando/skipper/args"
 	"github.com/zalando/skipper/eskip"
 	"github.com/zalando/skipper/filters"
 	"github.com/zalando/skipper/proxy/proxytest"
@@ -134,7 +135,7 @@ func TestRandomArgs(t *testing.T) {
 		switch {
 		case err == nil && ti.err:
 			t.Error(ti.msg, "failed to fail")
-		case err != filters.ErrInvalidFilterParameters && ti.err:
+		case err != args.ErrInvalidArgs && ti.err:
 			t.Error(ti.msg, "failed to fail with the right error")
 		case err != nil && !ti.err:
 			t.Error(ti.msg, err)
@@ -450,7 +451,7 @@ func TestThrottleArgs(t *testing.T) {
 		switch {
 		case err == nil && ti.err:
 			t.Error(ti.msg, "failed to fail")
-		case err != filters.ErrInvalidFilterParameters && ti.err:
+		case err != args.ErrInvalidArgs && ti.err:
 			t.Error(ti.msg, "failed to fail with the right error")
 		case err != nil && !ti.err:
 			t.Error(ti.msg, err)

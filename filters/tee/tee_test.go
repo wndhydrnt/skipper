@@ -30,7 +30,12 @@ type myHandler struct {
 }
 
 func TestTeeHostHeaderChanges(t *testing.T) {
-	f, _ := testTeeSpec.CreateFilter(teeArgsAsBackend)
+	f, err := testTeeSpec.CreateFilter(teeArgsAsBackend)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
 	fc := buildfilterContext()
 
 	rep, _ := f.(*tee)

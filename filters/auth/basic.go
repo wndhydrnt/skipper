@@ -1,9 +1,11 @@
 package auth
 
 import (
-	auth "github.com/abbot/go-http-auth"
-	"github.com/zalando/skipper/filters"
 	"net/http"
+
+	auth "github.com/abbot/go-http-auth"
+	"github.com/zalando/skipper/args"
+	"github.com/zalando/skipper/filters"
 )
 
 const (
@@ -45,22 +47,11 @@ func (a *basic) Request(ctx filters.FilterContext) {
 // Creates out basicAuth Filter
 // The first params specifies the used htpasswd file
 // The second is optional and defines the realm name
-func (spec *basicSpec) CreateFilter(config []interface{}) (filters.Filter, error) {
-	if len(config) == 0 {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
-	configFile, ok := config[0].(string)
-	if !ok {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
+func (spec *basicSpec) CreateFilter(a []interface{}) (filters.Filter, error) {
+	var configFile string
 	realmName := DefaultRealmName
-
-	if len(config) == 2 {
-		if definedName, ok := config[1].(string); ok {
-			realmName = definedName
-		}
+	if err := args.Capture(&configFile, args.Optional(&realmName), a); err != nil {
+		return nil, err
 	}
 
 	htpasswd := auth.HtpasswdFileProvider(configFile)

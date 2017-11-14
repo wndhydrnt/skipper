@@ -1,10 +1,11 @@
 package builtin
 
 import (
-	"fmt"
+	"net/http"
+
+	"github.com/zalando/skipper/args"
 	"github.com/zalando/skipper/filters"
 	"github.com/zalando/skipper/filters/serve"
-	"net/http"
 )
 
 type static struct {
@@ -28,19 +29,13 @@ func (spec *static) Name() string { return StaticName }
 
 // Creates instances of the static filter. Expects two parameters: request path
 // prefix and file system root.
-func (spec *static) CreateFilter(config []interface{}) (filters.Filter, error) {
-	if len(config) != 2 {
-		return nil, fmt.Errorf("invalid number of args: %d, expected 1", len(config))
-	}
-
-	webRoot, ok := config[0].(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid parameter type, expected string for web root prefix")
-	}
-
-	root, ok := config[1].(string)
-	if !ok {
-		return nil, fmt.Errorf("invalid parameter type, expected string for path to root dir")
+func (spec *static) CreateFilter(a []interface{}) (filters.Filter, error) {
+	var (
+		webRoot string
+		root    string
+	)
+	if err := args.Capture(&webRoot, &root, a); err != nil {
+		return nil, err
 	}
 
 	return &static{http.StripPrefix(webRoot, http.FileServer(http.Dir(root)))}, nil

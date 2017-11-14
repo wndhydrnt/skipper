@@ -72,6 +72,7 @@ func TestBreaker(t *testing.T) {
 			f, err := s.CreateFilter(args)
 			if err != nil {
 				t.Error(err)
+				return
 			}
 
 			ctx := &filtertest.Context{

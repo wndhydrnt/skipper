@@ -1,7 +1,6 @@
 package tee
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/zalando/skipper/args"
 	"github.com/zalando/skipper/filters"
 )
 
@@ -215,62 +215,55 @@ func cloneRequest(t *tee, req *http.Request) (*http.Request, io.ReadCloser, erro
 // Creates out tee Filter
 // If only one parameter is given shadow backend is used as it is specified
 // If second and third parameters are also set, then path is modified
-func (spec *teeSpec) CreateFilter(config []interface{}) (filters.Filter, error) {
-	client := &http.Client{Timeout: spec.options.Timeout}
+func (spec *teeSpec) CreateFilter(a []interface{}) (filters.Filter, error) {
+	var (
+		backend     string
+		modPath     []string
+		rx          *regexp.Regexp
+		replacement string
+	)
 
+	typ := asBackend
+
+	if err := args.Capture(&backend, &modPath, a); err != nil {
+		return nil, err
+	}
+
+	u, err := url.Parse(backend)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(modPath) != 0 && len(modPath) != 2 {
+		return nil, args.ErrInvalidArgs
+	}
+
+	if len(modPath) == 2 {
+		typ = pathModified
+
+		rx, err = regexp.Compile(modPath[0])
+		if err != nil {
+			return nil, err
+		}
+
+		replacement = modPath[1]
+	}
+
+	client := &http.Client{Timeout: spec.options.Timeout}
 	if spec.options.NoFollow {
 		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		}
 	}
 
-	tee := tee{client: client}
-
-	if len(config) == 0 {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-	backend, ok := config[0].(string)
-	if !ok {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
-	if u, err := url.Parse(backend); err == nil {
-		tee.host = u.Host
-		tee.scheme = u.Scheme
-	} else {
-		return nil, err
-	}
-
-	if len(config) == 1 {
-		tee.typ = asBackend
-		return &tee, nil
-	}
-
-	//modpath
-	if len(config) == 3 {
-		expr, ok := config[1].(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid filter config in %s, expecting regexp and string, got: %v", Name, config)
-		}
-
-		replacement, ok := config[2].(string)
-		if !ok {
-			return nil, fmt.Errorf("invalid filter config in %s, expecting regexp and string, got: %v", Name, config)
-		}
-
-		rx, err := regexp.Compile(expr)
-
-		if err != nil {
-			return nil, err
-		}
-		tee.typ = pathModified
-		tee.rx = rx
-		tee.replacement = replacement
-
-		return &tee, nil
-	}
-
-	return nil, filters.ErrInvalidFilterParameters
+	return &tee{
+		client:      client,
+		typ:         typ,
+		host:        u.Host,
+		scheme:      u.Scheme,
+		rx:          rx,
+		replacement: replacement,
+	}, nil
 }
 
 func (spec *teeSpec) Name() string {

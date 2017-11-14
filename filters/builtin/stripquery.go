@@ -1,26 +1,13 @@
-// Copyright 2015 Zalando SE
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package builtin
 
 import (
 	"bytes"
 	"fmt"
-	"github.com/zalando/skipper/filters"
 	"net/http"
 	"strconv"
-	"strings"
+
+	"github.com/zalando/skipper/args"
+	"github.com/zalando/skipper/filters"
 )
 
 type stripQuery struct {
@@ -39,7 +26,7 @@ type stripQuery struct {
 func NewStripQuery() filters.Spec { return &stripQuery{} }
 
 // "stripQuery"
-func (spec *stripQuery) Name() string { return StripQueryName }
+func (_ *stripQuery) Name() string { return StripQueryName }
 
 // copied from textproto/reader
 func validHeaderFieldByte(b byte) bool {
@@ -92,20 +79,18 @@ func (f *stripQuery) Request(ctx filters.FilterContext) {
 }
 
 // Noop.
-func (f *stripQuery) Response(ctx filters.FilterContext) {}
+func (_ *stripQuery) Response(ctx filters.FilterContext) {}
 
 // Creates instances of the stripQuery filter. Accepts one optional parameter:
 // "true", in order to preserve the stripped parameters in the request header.
-func (mw *stripQuery) CreateFilter(config []interface{}) (filters.Filter, error) {
-	var preserveAsHeader = false
-	if len(config) == 1 {
-		preserveAsHeaderString, ok := config[0].(string)
-		if !ok {
-			return nil, filters.ErrInvalidFilterParameters
-		}
-		if strings.ToLower(preserveAsHeaderString) == "true" {
-			preserveAsHeader = true
-		}
+func (_ *stripQuery) CreateFilter(a []interface{}) (filters.Filter, error) {
+	var preserveAsHeader string
+	if err := args.Capture(
+		args.Optional(args.Enum(&preserveAsHeader, "true", "false")),
+		a,
+	); err != nil {
+		return nil, err
 	}
-	return &stripQuery{preserveAsHeader}, nil
+
+	return &stripQuery{preserveAsHeader == "true"}, nil
 }

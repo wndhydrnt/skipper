@@ -1,23 +1,11 @@
-// Copyright 2015 Zalando SE
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package builtin
 
 import (
-	log "github.com/sirupsen/logrus"
-	"github.com/zalando/skipper/filters"
 	"net/url"
+
+	log "github.com/sirupsen/logrus"
+	"github.com/zalando/skipper/args"
+	"github.com/zalando/skipper/filters"
 )
 
 type spec struct{}
@@ -38,16 +26,16 @@ func PreserveHost() filters.Spec { return &spec{} }
 
 func (s *spec) Name() string { return PreserveHostName }
 
-func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
-	if len(args) != 1 {
-		return nil, filters.ErrInvalidFilterParameters
+func (s *spec) CreateFilter(a []interface{}) (filters.Filter, error) {
+	var preserve string
+	if err := args.Capture(
+		args.Enum(&preserve, "true", "false"),
+		a,
+	); err != nil {
+		return nil, err
 	}
 
-	if a, ok := args[0].(string); ok && a == "true" || a == "false" {
-		return filter(a == "true"), nil
-	} else {
-		return nil, filters.ErrInvalidFilterParameters
-	}
+	return filter(preserve == "true"), nil
 }
 
 func (preserve filter) Response(_ filters.FilterContext) {}

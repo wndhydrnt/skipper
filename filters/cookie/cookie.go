@@ -40,6 +40,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zalando/skipper/args"
 	"github.com/zalando/skipper/filters"
 )
 
@@ -47,6 +48,7 @@ const (
 	RequestCookieFilterName    = "requestCookie"
 	ResponseCookieFilterName   = "responseCookie"
 	ResponseJSCookieFilterName = "jsCookie"
+	AlwaysSetArg               = "always"
 	ChangeOnlyArg              = "change-only"
 	SetCookieHttpHeader        = "Set-Cookie"
 )
@@ -93,38 +95,36 @@ func NewJSCookie() filters.Spec {
 
 func (s *spec) Name() string { return s.filterName }
 
-func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
-	if len(args) < 2 || (len(args) > 2 && s.typ == request) || len(args) > 4 {
-		return nil, filters.ErrInvalidFilterParameters
+func (s *spec) CreateFilter(a []interface{}) (filters.Filter, error) {
+	f := filter{typ: s.typ}
+	capture := []interface{}{&f.name, &f.value}
+
+	var changeOnly string
+	switch s.typ {
+	case response, responseJS:
+		capture = append(
+			capture,
+			args.Optional(&f.ttl),
+			args.Optional(args.Enum(&changeOnly, AlwaysSetArg, ChangeOnlyArg)),
+		)
 	}
 
-	f := &filter{typ: s.typ}
-
-	if name, ok := args[0].(string); ok && name != "" {
-		f.name = name
-	} else {
-		return nil, filters.ErrInvalidFilterParameters
+	capture = append(capture, a)
+	if err := args.Capture(capture...); err != nil {
+		return nil, err
 	}
 
-	if value, ok := args[1].(string); ok {
-		f.value = value
-	} else {
-		return nil, filters.ErrInvalidFilterParameters
+	if f.name == "" {
+		return nil, args.ErrInvalidArgs
 	}
 
-	if len(args) >= 3 {
-		if ttl, ok := args[2].(float64); ok {
-			f.ttl = time.Duration(ttl) * time.Second
-		} else {
-			return nil, filters.ErrInvalidFilterParameters
-		}
+	// compat:
+	if f.ttl != 0 {
+		f.ttl = f.ttl * time.Second / time.Millisecond
 	}
+	f.changeOnly = changeOnly == ChangeOnlyArg
 
-	if len(args) == 4 {
-		f.changeOnly = args[3] == ChangeOnlyArg
-	}
-
-	return f, nil
+	return &f, nil
 }
 
 func (f *filter) Request(ctx filters.FilterContext) {

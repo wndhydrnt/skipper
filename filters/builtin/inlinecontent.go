@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/zalando/skipper/args"
 	"github.com/zalando/skipper/filters"
 )
 
@@ -46,27 +47,13 @@ func stringArg(a interface{}) (s string, err error) {
 	return
 }
 
-func (c *inlineContent) CreateFilter(args []interface{}) (filters.Filter, error) {
-	if len(args) == 0 || len(args) > 2 {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
-	var (
-		f   inlineContent
-		err error
-	)
-
-	f.text, err = stringArg(args[0])
-	if err != nil {
+func (c *inlineContent) CreateFilter(a []interface{}) (filters.Filter, error) {
+	var f inlineContent
+	if err := args.Capture(&f.text, args.Optional(&f.mime), a); err != nil {
 		return nil, err
 	}
 
-	if len(args) == 2 {
-		f.mime, err = stringArg(args[1])
-		if err != nil {
-			return nil, err
-		}
-	} else {
+	if f.mime == "" {
 		f.mime = http.DetectContentType([]byte(f.text))
 	}
 

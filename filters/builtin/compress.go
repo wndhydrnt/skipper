@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"errors"
 	"io"
-	"math"
 	"net/http"
 	"runtime"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/zalando/skipper/args"
 	"github.com/zalando/skipper/filters"
 )
 
@@ -138,49 +138,76 @@ func (c *compress) Name() string {
 	return CompressName
 }
 
-func (c *compress) CreateFilter(args []interface{}) (filters.Filter, error) {
-	f := &compress{
-		mime:  defaultCompressMIME,
-		level: flate.BestSpeed}
+func getCompressionLevel(a interface{}) (int, bool, error) {
+	l := flate.BestSpeed
 
-	if len(args) == 0 {
-		return f, nil
-	}
-
-	if lf, ok := args[0].(float64); ok && math.Trunc(lf) == lf {
-		f.level = int(lf)
-		_, err := gzip.NewWriterLevel(nil, f.level)
-		if err != nil {
-			return nil, filters.ErrInvalidFilterParameters
-		}
-
-		_, err = flate.NewWriter(nil, f.level)
-		if err != nil {
-			return nil, filters.ErrInvalidFilterParameters
-		}
-
-		args = args[1:]
-	}
-
-	if len(args) == 0 {
-		return f, nil
-	}
-
-	if args[0] == "..." {
-		args = args[1:]
+	if lf, ok := a.(float64); ok {
+		l = int(lf)
+	} else if li, ok := a.(int); ok {
+		l = li
 	} else {
-		f.mime = nil
+		return l, false, nil
 	}
 
-	for _, a := range args {
-		if s, ok := a.(string); ok {
-			f.mime = append(f.mime, s)
-		} else {
-			return nil, filters.ErrInvalidFilterParameters
-		}
+	if _, err := gzip.NewWriterLevel(nil, l); err != nil {
+		return l, false, args.ErrInvalidArgs
 	}
 
-	return f, nil
+	if _, err := flate.NewWriter(nil, l); err != nil {
+		return l, false, args.ErrInvalidArgs
+	}
+
+	// compat:
+	if l < flate.DefaultCompression || l > flate.BestCompression {
+		return l, false, args.ErrInvalidArgs
+	}
+
+	return l, true, nil
+}
+
+func getCompressableMime(a []interface{}) ([]string, error) {
+	if len(a) == 0 {
+		return defaultCompressMIME, nil
+	}
+
+	var mime []string
+	if a[0] == "..." {
+		mime = defaultCompressMIME
+		a = a[1:]
+	}
+
+	var explicit []string
+	if err := args.Capture(&explicit, a); err != nil {
+		return nil, err
+	}
+
+	return append(mime, explicit...), nil
+}
+
+func (c *compress) CreateFilter(a []interface{}) (filters.Filter, error) {
+	if len(a) == 0 {
+		return &compress{
+			mime:  defaultCompressMIME,
+			level: flate.BestSpeed,
+		}, nil
+	}
+
+	l, ok, err := getCompressionLevel(a[0])
+	if err != nil {
+		return nil, err
+	} else if ok {
+		a = a[1:]
+	}
+
+	mime, err := getCompressableMime(a)
+	if err != nil {
+		return nil, err
+	}
+
+	return &compress{
+		mime:  mime,
+		level: l,
+	}, nil
 }
 
 func (c *compress) Request(_ filters.FilterContext) {}

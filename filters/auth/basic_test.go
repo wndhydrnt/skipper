@@ -17,11 +17,13 @@ func TestWithMissingAuth(t *testing.T) {
 	f, err := spec.CreateFilter([]interface{}{"testdata/htpasswd"})
 	if err != nil {
 		t.Error(err)
+		return
 	}
 
 	req, err := http.NewRequest("GET", "https://www.example.org/", nil)
 	if err != nil {
 		t.Error(err)
+		return
 	}
 
 	expectedBasicAuthHeaderValue := ForceBasicAuthHeaderValue + `"Basic Realm"`
@@ -38,12 +40,14 @@ func TestWithWrongAuth(t *testing.T) {
 	f, err := spec.CreateFilter([]interface{}{"testdata/htpasswd", "My Website"})
 	if err != nil {
 		t.Error(err)
+		return
 	}
 
 	req, err := http.NewRequest("GET", "https://www.example.org/", nil)
 	req.SetBasicAuth("myName", "wrongPassword")
 	if err != nil {
 		t.Error(err)
+		return
 	}
 
 	expectedBasicAuthHeaderValue := ForceBasicAuthHeaderValue + `"My Website"`
@@ -60,12 +64,14 @@ func TestWithSuccessfulAuth(t *testing.T) {
 	f, err := spec.CreateFilter([]interface{}{"testdata/htpasswd"})
 	if err != nil {
 		t.Error(err)
+		return
 	}
 
 	req, err := http.NewRequest("GET", "https://www.example.org/", nil)
 	req.SetBasicAuth("myName", "myPassword")
 	if err != nil {
 		t.Error(err)
+		return
 	}
 
 	ctx := &filtertest.Context{FRequest: req}

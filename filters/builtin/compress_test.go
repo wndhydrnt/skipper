@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zalando/skipper/args"
 	"github.com/zalando/skipper/eskip"
-	"github.com/zalando/skipper/filters"
 	"github.com/zalando/skipper/filters/filtertest"
 	"github.com/zalando/skipper/proxy/proxytest"
 )
@@ -151,25 +151,19 @@ func TestCompressArgs(t *testing.T) {
 	}, {
 		"invalid parameter",
 		[]interface{}{"x/custom-0", "x/custom-1", 3.14},
-		filters.ErrInvalidFilterParameters,
+		args.ErrInvalidArgs,
 		nil,
 		flate.BestSpeed,
 	}, {
-		"non integer level",
-		[]interface{}{3.14, "...", "x/custom"},
-		filters.ErrInvalidFilterParameters,
-		nil,
-		0,
-	}, {
 		"level too small",
-		[]interface{}{-1, "...", "x/custom"},
-		filters.ErrInvalidFilterParameters,
+		[]interface{}{-2, "...", "x/custom"},
+		args.ErrInvalidArgs,
 		nil,
 		0,
 	}, {
 		"level too big",
 		[]interface{}{10, "...", "x/custom"},
-		filters.ErrInvalidFilterParameters,
+		args.ErrInvalidArgs,
 		nil,
 		0,
 	}, {

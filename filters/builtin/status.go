@@ -1,6 +1,9 @@
 package builtin
 
-import "github.com/zalando/skipper/filters"
+import (
+	"github.com/zalando/skipper/args"
+	"github.com/zalando/skipper/filters"
+)
 
 type statusSpec struct{}
 
@@ -13,19 +16,13 @@ func NewStatus() filters.Spec { return new(statusSpec) }
 
 func (s *statusSpec) Name() string { return StatusName }
 
-func (s *statusSpec) CreateFilter(args []interface{}) (filters.Filter, error) {
-	if len(args) != 1 {
-		return nil, filters.ErrInvalidFilterParameters
+func (s *statusSpec) CreateFilter(a []interface{}) (filters.Filter, error) {
+	var value int
+	if err := args.Capture(&value, a); err != nil {
+		return nil, err
 	}
 
-	switch c := args[0].(type) {
-	case int:
-		return statusFilter(c), nil
-	case float64:
-		return statusFilter(c), nil
-	default:
-		return nil, filters.ErrInvalidFilterParameters
-	}
+	return statusFilter(value), nil
 }
 
 func (f statusFilter) Request(filters.FilterContext) {}
