@@ -153,12 +153,20 @@ func TestFixedArgs(t *testing.T) {
 		"3s",
 	})
 
-	run("wrong type, not duration", false, []interface{}{
+	run("wrong type, not duration string", false, []interface{}{
 		42,
 		3.0,
 		"foo",
 		"red",
 		"bar",
+	})
+
+	run("wrong type, not duration", false, []interface{}{
+		42,
+		3.0,
+		"foo",
+		"red",
+		struct{}{},
 	})
 
 	run("pass", true, []interface{}{
@@ -541,6 +549,17 @@ func TestOptionalArgs(t *testing.T) {
 		}
 	})
 
+	t.Run("missing optional", func(t *testing.T) {
+		var (
+			a int
+			b string
+		)
+
+		if err := Capture(&a, Optional(&b), []interface{}{42}); err != nil {
+			t.Error(err)
+		}
+	})
+
 	t.Run("non-optional after optional", func(t *testing.T) {
 		var (
 			a int
@@ -624,6 +643,43 @@ func TestOptionalArgs(t *testing.T) {
 
 		if a != 42 || b != "true" {
 			t.Error("failed to capture args", a, b, 42, "true")
+		}
+	})
+
+	t.Run("too many with optional", func(t *testing.T) {
+		var (
+			a int
+			b string
+		)
+
+		if err := Capture(&a, Optional(&b), []interface{}{42, "foo", "bar"}); err == nil {
+			t.Error("failed to fail")
+		}
+	})
+
+	t.Run("optional leaves the default", func(t *testing.T) {
+		var a int
+		b := "default value"
+		if err := Capture(&a, Optional(&b), []interface{}{42}); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if b != "default value" {
+			t.Error("failed to leave the default value")
+		}
+	})
+
+	t.Run("optional overrides the default with empty", func(t *testing.T) {
+		var a int
+		b := "default value"
+		if err := Capture(&a, Optional(&b), []interface{}{42, ""}); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if b != "" {
+			t.Error("failed to leave the default value")
 		}
 	})
 }

@@ -82,6 +82,10 @@ func validateCapture(capture interface{}, f captureFlags) error {
 
 		return validateCapture(p.p, f)
 	case optional:
+		if f&hasArgs == 0 {
+			return nil
+		}
+
 		return validateCapture(p.p, f&^expectingOptional|expectingSingle)
 	}
 
@@ -273,8 +277,10 @@ func captureArg(capture interface{}, a []interface{}, f captureFlags) (nextFlags
 			*p.p.(*string), err = captureEnum(p.options, a[0])
 		}
 	case optional:
-		nextFlags, err = captureArg(p.p, a, f)
-		nextFlags |= expectingOptional
+		if f&hasArgs != 0 {
+			nextFlags, err = captureArg(p.p, a, f)
+			nextFlags |= expectingOptional
+		}
 	default:
 		err = errNotSupportedCaptureType
 	}
@@ -300,6 +306,7 @@ func Capture(a ...interface{}) error {
 		index   int
 		capture interface{}
 	)
+
 	f := hasArgs
 	for index, capture = range captures {
 		if len(args) == index {
@@ -314,8 +321,10 @@ func Capture(a ...interface{}) error {
 			return err
 		}
 
-		if f, err = captureArg(capture, args[index:], f); err != nil {
-			return err
+		if f&hasArgs != 0 {
+			if f, err = captureArg(capture, args[index:], f); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -350,4 +359,8 @@ func Enum(a interface{}, options ...string) interface{} {
 
 func Optional(a interface{}) interface{} {
 	return optional{a}
+}
+
+func Duration(a interface{}, unit time.Duration) interface{} {
+	return nil
 }
