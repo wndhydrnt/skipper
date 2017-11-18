@@ -167,8 +167,8 @@ func testIngresses() []*ingressItem {
 				testPathRule("/test2", "service2", backendPort{"port2"}),
 			),
 		),
-		testIngress("namespace1", "ratelimit", "service1", "localRatelimit(20,\"1m\")", "", "", backendPort{8080}, 1.0),
-		testIngress("namespace1", "ratelimitAndBreaker", "service1", "", "localRatelimit(20,\"1m\") -> consecutiveBreaker(15)", "", backendPort{8080}, 1.0),
+		testIngress("namespace1", "ratelimit", "service1", "clientRatelimit(20,\"1m\")", "", "", backendPort{8080}, 1.0),
+		testIngress("namespace1", "ratelimitAndBreaker", "service1", "", "clientRatelimit(20,\"1m\") -> consecutiveBreaker(15)", "", backendPort{8080}, 1.0),
 	}
 }
 
@@ -2165,21 +2165,21 @@ func TestRatelimits(t *testing.T) {
 			t.Error("failed to fail")
 		}
 
-		checkLocalRatelimit(t, r, map[string]string{
-			"kube_namespace1__ratelimit______": "localRatelimit(20,\"1m\")",
+		checkClientRatelimit(t, r, map[string]string{
+			"kube_namespace1__ratelimit______": "clientRatelimit(20,\"1m\")",
 		})
 	})
 }
 
-func checkLocalRatelimit(t *testing.T, got []*eskip.Route, expected map[string]string) {
+func checkClientRatelimit(t *testing.T, got []*eskip.Route, expected map[string]string) {
 	for _, r := range got {
 		if r.Filters != nil {
 			for _, f := range r.Filters {
 				_, ok := expected[r.Id]
-				if ok && f.Name != "localRatelimit" {
+				if ok && f.Name != "clientRatelimit" {
 					t.Errorf("%s should have a localratelimit", r.Id)
 				}
-				if !ok && f.Name == "localRatelimit" {
+				if !ok && f.Name == "clientRatelimit" {
 					t.Errorf("%s should not have a localratelimit", r.Id)
 				}
 			}
@@ -2208,7 +2208,7 @@ func TestSkipperFilter(t *testing.T) {
 		}
 
 		checkSkipperFilter(t, r, map[string][]string{
-			"kube_namespace1__ratelimitAndBreaker______": []string{"localRatelimit(20,\"1m\")", "consecutiveBreaker(15)"},
+			"kube_namespace1__ratelimitAndBreaker______": []string{"clientRatelimit(20,\"1m\")", "consecutiveBreaker(15)"},
 		})
 	})
 }
@@ -2219,7 +2219,7 @@ func checkSkipperFilter(t *testing.T, got []*eskip.Route, expected map[string][]
 			f1 := r.Filters[0]
 			f2 := r.Filters[1]
 			_, ok := expected[r.Id]
-			if ok && f1.Name != "localRatelimit" {
+			if ok && f1.Name != "clientRatelimit" {
 				t.Errorf("%s should have a localratelimit", r.Id)
 			}
 			if ok && f2.Name != "consecutiveBreaker" {

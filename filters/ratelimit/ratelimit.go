@@ -24,7 +24,7 @@ type filter struct {
 	settings ratelimit.Settings
 }
 
-// NewLocalRatelimit creates a local measured rate limiting, that is
+// NewClientRatelimit creates a client measured rate limiting, that is
 // only aware of itself. If you have 5 instances with 20 req/s, then
 // it would allow 100 req/s to the backend from the same user. A third
 // argument can be used to set which part of the request should be
@@ -34,16 +34,16 @@ type filter struct {
 // Example:
 //
 //    backendHealthcheck: Path("/healthcheck")
-//    -> localRatelimit(20, "1m")
+//    -> clientRatelimit(20, "1m")
 //    -> "https://foo.backend.net";
 //
 // Example rate limit per Authorization Header:
 //
 //    login: Path("/login")
-//    -> localRatelimit(3, "1m", "auth")
+//    -> clientRatelimit(3, "1m", "auth")
 //    -> "https://login.backend.net";
-func NewLocalRatelimit() filters.Spec {
-	return &spec{typ: ratelimit.LocalRatelimit, filterName: ratelimit.LocalRatelimitName}
+func NewClientRatelimit() filters.Spec {
+	return &spec{typ: ratelimit.ClientRatelimit, filterName: ratelimit.ClientRatelimitName}
 }
 
 // NewRatelimit creates a service rate limiting, that is
@@ -106,7 +106,7 @@ func serviceRatelimitFilter(args []interface{}) (filters.Filter, error) {
 	}, nil
 }
 
-func localRatelimitFilter(args []interface{}) (filters.Filter, error) {
+func clientRatelimitFilter(args []interface{}) (filters.Filter, error) {
 	if !(len(args) == 2 || len(args) == 3) {
 		return nil, filters.ErrInvalidFilterParameters
 	}
@@ -146,7 +146,7 @@ func localRatelimitFilter(args []interface{}) (filters.Filter, error) {
 
 	return &filter{
 		settings: ratelimit.Settings{
-			Type:          ratelimit.LocalRatelimit,
+			Type:          ratelimit.ClientRatelimit,
 			MaxHits:       maxHits,
 			TimeWindow:    timeWindow,
 			CleanInterval: 10 * timeWindow,
@@ -167,8 +167,8 @@ func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
 	switch s.typ {
 	case ratelimit.ServiceRatelimit:
 		return serviceRatelimitFilter(args)
-	case ratelimit.LocalRatelimit:
-		return localRatelimitFilter(args)
+	case ratelimit.ClientRatelimit:
+		return clientRatelimitFilter(args)
 	default:
 		return disableFilter(args)
 	}

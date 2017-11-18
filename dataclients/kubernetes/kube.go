@@ -44,7 +44,8 @@ A basic ingress specification:
 Example - Ingress with ratelimiting
 
 The example shows 50 calls per minute are allowed to each skipper
-instance for the given ingress.
+instance for the given ingress. In a skipper mesh, this will calculate
+cluster wide ratelimit to 50 calls per minute into the cluster.
 
     apiVersion: extensions/v1beta1
     kind: Ingress
@@ -65,13 +66,15 @@ Example - Ingress with client based ratelimiting
 
 The example shows 3 calls per minute per client, based on
 X-Forwarded-For header or IP incase there is no X-Forwarded-For header
-set, are allowed to each skipper instance for the given ingress.
+set, are allowed to each skipper instance for the given ingress. In a
+skipper mesh, this will calculate cluster wide ratelimit to 3 calls
+per minute into the cluster.
 
     apiVersion: extensions/v1beta1
     kind: Ingress
     metadata:
       annotations:
-        zalando.org/ratelimit: localRatelimit(3, "1m")
+        zalando.org/ratelimit: clientRatelimit(3, "1m")
       name: app
     spec:
       rules:
@@ -84,13 +87,14 @@ set, are allowed to each skipper instance for the given ingress.
 
 The example shows 500 calls per hour per client, based on
 Authorization header set, are allowed to each skipper instance for the
-given ingress.
+given ingress. In a skipper mesh, this will calculate
+cluster wide ratelimit to 500 calls per hour into the cluster.
 
     apiVersion: extensions/v1beta1
     kind: Ingress
     metadata:
       annotations:
-        zalando.org/ratelimit: localRatelimit(500, "1h", "auth")
+        zalando.org/ratelimit: clientRatelimit(500, "1h", "auth")
       name: app
     spec:
       rules:
@@ -104,13 +108,14 @@ given ingress.
 Example - Ingress with custom skipper filter configuration
 
 The example shows the use of 2 filters from skipper for the implicitly
-defined route in ingress.
+defined route in ingress. In a skipper mesh, this will calculate
+cluster wide ratelimit to 50 calls per 10 minute timeframe into the cluster.
 
     apiVersion: extensions/v1beta1
     kind: Ingress
     metadata:
       annotations:
-        zalando.org/skipper-filter: localRatelimit(50, "10m") -> requestCookie("test-session", "abc")
+        zalando.org/skipper-filter: clientRatelimit(50, "10m") -> requestCookie("test-session", "abc")
       name: app
     spec:
       rules:
@@ -181,6 +186,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -190,6 +196,7 @@ import (
 	"github.com/zalando/skipper/filters/builtin"
 	"github.com/zalando/skipper/predicates/source"
 	"github.com/zalando/skipper/predicates/traffic"
+	"github.com/zalando/skipper/ratelimit"
 )
 
 // FEATURE:
@@ -213,6 +220,8 @@ const (
 	ratelimitAnnotationKey        = "zalando.org/ratelimit"
 	skipperfilterAnnotationKey    = "zalando.org/skipper-filter"
 	skipperpredicateAnnotationKey = "zalando.org/skipper-predicate"
+	skipperDaemonsetURI           = "/apis/extensions/v1beta1/namespaces/%s/daemonsets/%s"
+	skipperDeploymentURI          = "/apis/extensions/v1beta1/namespaces/%s/deployments/%s"
 )
 
 var internalIPs = []interface{}{
@@ -255,6 +264,19 @@ type Options struct {
 	// https://github.com/zalando-incubator/kubernetes-on-aws project.)
 	ProvideHTTPSRedirect bool
 
+	// Mesh, if set, skipper enables mesh features, for example
+	// clusterRatelimit() filter requires it.
+	Mesh bool
+
+	// Daemonset, if set skipper is deployed as daemonset, if not as deployment.
+	Daemonset bool
+
+	// Name of the skipper deployment in Kubernetes
+	Name string
+
+	// Namespace of the skipper deployment in Kubernetes
+	Namespace string
+
 	// IngressClass is a regular expression to filter only those ingresses that match. If an ingress does
 	// not have a class annotation or the annotation is an empty string, skipper will load it. The default
 	// value for the ingress class is 'skipper'.
@@ -267,12 +289,93 @@ type Options struct {
 	ForceFullUpdatePeriod time.Duration
 }
 
+// Mesh data to be used to store and update data about our mesh
+type Mesh struct {
+	daemonset    bool
+	name         string
+	namespace    string
+	numInstances int
+}
+
+type patchMeshFunction func() string
+
+func identity(st string) string {
+	return st
+}
+
+func clusterRatelimit(m *Mesh, s string) string {
+	filters, err := eskip.ParseFilters(s)
+	if err != nil {
+		return identity(s)
+	}
+
+	result := []string{}
+
+	for _, filter := range filters {
+		switch filter.Name {
+		case ratelimit.ClientRatelimitName:
+			fallthrough
+		case ratelimit.ServiceRatelimitName:
+			if len(filter.Args) > 2 {
+				i, err := strconv.Atoi(filter.Args[0].(string))
+				if err != nil {
+					return identity(s)
+				}
+
+				// depends on cluster size, might not makes sense
+				maxPerInstance := i / m.numInstances
+				if maxPerInstance <= 0 {
+					maxPerInstance = 1
+				}
+				filter.Args[0] = fmt.Sprintf("%d", maxPerInstance)
+				res := []string{filter.Name, "("}
+				for i := range filter.Args {
+					res = append(res, ",", filter.Args[i].(string))
+				}
+				res = append(res, ")")
+				result = append(result, strings.Join(res, ""))
+			}
+		default:
+			res := append(result, filter.Name, "(")
+			for i := range filter.Args {
+				res = append(res, ",", filter.Args[i].(string))
+			}
+			res = append(res, ")")
+			result = append(result, strings.Join(res, ""))
+		}
+	}
+	return strings.Join(result, " -> ")
+}
+
+// patchMeshFilter returns a patched version of the given filter to be
+// used to eskip parse a filter
+func (m *Mesh) patchMeshFilter(st string) string {
+	if m == nil {
+		return st
+	}
+	s := strings.TrimSpace(st)
+
+	for featurePrefix, f := range map[string]func(*Mesh, string) string{
+		"ratelimit":       clusterRatelimit,
+		"clientRatelimit": clusterRatelimit,
+	} {
+		if strings.HasPrefix(s, featurePrefix) {
+			return f(m, s)
+		}
+	}
+	return identity(st)
+}
+
 // Client is a Skipper DataClient implementation used to create routes based on Kubernetes Ingress settings.
 type Client struct {
 	httpClient           *http.Client
 	apiURL               string
 	provideHealthcheck   bool
 	provideHTTPSRedirect bool
+	mesh                 *Mesh
+	daemonset            bool
+	name                 string
+	namespace            string
 	token                string
 	current              map[string]*eskip.Route
 	termReceived         bool
@@ -324,11 +427,21 @@ func New(o Options) (*Client, error) {
 		signal.Notify(sigs, syscall.SIGTERM)
 	}
 
+	var mesh *Mesh
+	if o.Mesh {
+		mesh = &Mesh{
+			daemonset: o.Daemonset,
+			name:      o.Name,
+			namespace: o.Namespace,
+		}
+	}
+
 	return &Client{
 		httpClient:           httpClient,
 		apiURL:               apiURL,
 		provideHealthcheck:   o.ProvideHealthcheck,
 		provideHTTPSRedirect: o.ProvideHTTPSRedirect,
+		mesh:                 mesh,
 		current:              make(map[string]*eskip.Route),
 		token:                token,
 		sigs:                 sigs,
@@ -588,13 +701,13 @@ func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 		// parse filter and ratelimit annotation
 		var annotationFilter string
 		if ratelimitAnnotationValue, ok := i.Metadata.Annotations[ratelimitAnnotationKey]; ok {
-			annotationFilter = ratelimitAnnotationValue
+			annotationFilter = c.mesh.patchMeshFilter(ratelimitAnnotationValue)
 		}
 		if val, ok := i.Metadata.Annotations[skipperfilterAnnotationKey]; ok {
 			if annotationFilter != "" {
 				annotationFilter = annotationFilter + " -> "
 			}
-			annotationFilter = annotationFilter + val
+			annotationFilter = annotationFilter + c.mesh.patchMeshFilter(val)
 		}
 		// parse predicate annotation
 		var annotationPredicate string
@@ -803,8 +916,18 @@ func (c *Client) filterIngressesByClass(items []*ingressItem) []*ingressItem {
 }
 
 func (c *Client) loadAndConvert() ([]*eskip.Route, error) {
+	if c.mesh != nil {
+		num, err := c.getNumberOfInstances()
+		if err != nil {
+			log.Errorf("Failed to get num of instances: %v", err)
+		} else {
+			c.mesh.numInstances = num
+			log.Debugf("%d number of available (ds=%v) %s instances in %s", c.mesh.numInstances, c.mesh.daemonset, c.mesh.name, c.mesh.namespace)
+		}
+	}
+
 	var il ingressList
-	log.Debugf("requesting ingresses")
+	log.Debugln("requesting ingresses")
 	if err := c.getJSON(ingressesURI, &il); err != nil {
 		log.Debugf("requesting all ingresses failed: %v", err)
 		return nil, err
@@ -895,14 +1018,15 @@ func (c *Client) LoadAll() ([]*eskip.Route, error) {
 	}
 
 	c.current = mapRoutes(r)
-	log.Debugf("all routes loaded and mapped")
+	log.Debugln("all routes loaded and mapped")
 
 	return r, nil
 }
 
 // TODO: implement a force reset after some time
 func (c *Client) LoadUpdate() ([]*eskip.Route, []string, error) {
-	log.Debugf("polling for updates")
+	log.Debugln("polling for updates")
+
 	r, err := c.loadAndConvert()
 	if err != nil {
 		log.Errorf("polling for updates failed: %v", err)
@@ -910,7 +1034,7 @@ func (c *Client) LoadUpdate() ([]*eskip.Route, []string, error) {
 	}
 
 	next := mapRoutes(r)
-	log.Debugf("next version of routes loaded and mapped")
+	log.Debugln("next version of routes loaded and mapped")
 
 	var (
 		updatedRoutes []*eskip.Route
@@ -943,4 +1067,25 @@ func (c *Client) LoadUpdate() ([]*eskip.Route, []string, error) {
 
 	c.current = next
 	return updatedRoutes, deletedIDs, nil
+}
+
+// getNumberOfInstances will return the number of available instances as kubernetes knows
+// - [ ] it should be possible to get namespace as configured
+// - [ ] it should be possible to get data from daemonset and deployment as confiured
+func (c *Client) getNumberOfInstances() (int, error) {
+	if c.daemonset {
+		var ds daemonsetItem
+		dsURL := fmt.Sprintf(skipperDaemonsetURI, c.namespace, c.name)
+		if err := c.getJSON(dsURL, &ds); err != nil {
+			return -1, err
+		}
+		return ds.Status.NumberAvailable, nil
+	}
+
+	deploymentURL := fmt.Sprintf(skipperDeploymentURI, c.namespace, c.name)
+	var depl deploymentItem
+	if err := c.getJSON(deploymentURL, &depl); err != nil {
+		return -1, err
+	}
+	return depl.Status.NumberAvailable, nil
 }

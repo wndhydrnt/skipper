@@ -41,6 +41,10 @@ const (
 	defaultApplicationLogLevel  = "INFO"
 	defaultBackendFlushInterval = 20 * time.Millisecond
 	defaultExperimentalUpgrade  = false
+	defaultKubernetesMesh       = false
+	defaultKubernetesDaemonset  = true
+	defaultKubernetesName       = "skipper-ingress"
+	defaultKubernetesNamespace  = "kube-system"
 
 	addressUsage                   = "network address that skipper should listen on"
 	etcdUrlsUsage                  = "urls of nodes in an etcd cluster, storing route definitions"
@@ -51,6 +55,10 @@ const (
 	kubernetesHealthcheckUsage     = "automatic healthcheck route for internal IPs with path /kube-system/healthz; valid only with kubernetes"
 	kubernetesHTTPSRedirectUsage   = "automatic HTTP->HTTPS redirect route; valid only with kubernetes"
 	kubernetesIngressClassUsage    = "ingress class regular expression used to filter ingress resources for kubernetes"
+	kubernetesMeshUsage            = "enables cluster aware Mesh functionality, required for clusterRatelimit and more advanced capabilites, defaults to false"
+	kubernetesDaemonsetUsage       = "information required for kubernetesMesh functionality to decide if it is installed as daemonset or deployment, defaults to true"
+	kubernetesNameUsage            = "information required for kubernetesMesh functionality to get information about skipper deployment, defaults to skipper-ingress"
+	kubernetesNamespaceUsage       = "information required for kubernetesMesh functionality to get information about skipper deployment, defaults to kube-system"
 	innkeeperURLUsage              = "API endpoint of the Innkeeper service, storing route definitions"
 	innkeeperAuthTokenUsage        = "fixed token for innkeeper authentication"
 	innkeeperPreRouteFiltersUsage  = "filters to be prepended to each route loaded from Innkeeper"
@@ -121,6 +129,10 @@ var (
 	kubernetesHealthcheck     bool
 	kubernetesHTTPSRedirect   bool
 	kubernetesIngressClass    string
+	kubernetesMesh            bool
+	kubernetesDaemonset       bool
+	kubernetesName            string
+	kubernetesNamespace       string
 	innkeeperURL              string
 	sourcePollTimeout         int64
 	routesFile                string
@@ -186,6 +198,10 @@ func init() {
 	flag.BoolVar(&kubernetesHealthcheck, "kubernetes-healthcheck", true, kubernetesHealthcheckUsage)
 	flag.BoolVar(&kubernetesHTTPSRedirect, "kubernetes-https-redirect", true, kubernetesHTTPSRedirectUsage)
 	flag.StringVar(&kubernetesIngressClass, "kubernetes-ingress-class", "", kubernetesIngressClassUsage)
+	flag.BoolVar(&kubernetesMesh, "kubernetes-mesh", false, kubernetesMeshUsage)
+	flag.BoolVar(&kubernetesDaemonset, "kubernetes-daemonset", true, kubernetesDaemonsetUsage)
+	flag.StringVar(&kubernetesName, "kubernetes-name", "skipper-ingress", kubernetesNameUsage)
+	flag.StringVar(&kubernetesNamespace, "kubernetes-namespace", "kube-system", kubernetesNamespaceUsage)
 	flag.StringVar(&innkeeperURL, "innkeeper-url", "", innkeeperURLUsage)
 	flag.Int64Var(&sourcePollTimeout, "source-poll-timeout", defaultSourcePollTimeout, sourcePollTimeoutUsage)
 	flag.StringVar(&routesFile, "routes-file", "", routesFileUsage)
@@ -294,6 +310,10 @@ func main() {
 		KubernetesHealthcheck:               kubernetesHealthcheck,
 		KubernetesHTTPSRedirect:             kubernetesHTTPSRedirect,
 		KubernetesIngressClass:              kubernetesIngressClass,
+		KubernetesMesh:                      kubernetesMesh,
+		KubernetesDaemonset:                 kubernetesDaemonset,
+		KubernetesName:                      kubernetesName,
+		KubernetesNamespace:                 kubernetesNamespace,
 		InnkeeperUrl:                        innkeeperURL,
 		SourcePollTimeout:                   time.Duration(sourcePollTimeout) * time.Millisecond,
 		RoutesFile:                          routesFile,

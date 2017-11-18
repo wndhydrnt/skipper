@@ -91,6 +91,23 @@ type Options struct {
 	// be loaded, too.
 	KubernetesIngressClass string
 
+	// KubernetesMesh, when set skipper is deployed enables mesh
+	// features, for example clusterRatelimit filter.required
+	KubernetesMesh bool
+
+	// KubernetesDaemonset (used if KubernetesMesh is set, default
+	// true), when set skipper is deployed as daemonset, if not as
+	// deployment.
+	KubernetesDaemonset bool
+
+	// KubernetesName (used if KubernetesMesh is set, default
+	// "skipper-ingress"), of the skipper deployment in Kubernetes
+	KubernetesName string
+
+	// KubernetesNamespace (used if KubernetesMesh is set, default
+	// "kube-system"), of the skipper deployment in Kubernetes
+	KubernetesNamespace string
+
 	// API endpoint of the Innkeeper service, storing route definitions.
 	InnkeeperUrl string
 
@@ -376,6 +393,10 @@ func createDataClients(o Options, auth innkeeper.Authentication) ([]routing.Data
 			KubernetesURL:        o.KubernetesURL,
 			ProvideHealthcheck:   o.KubernetesHealthcheck,
 			ProvideHTTPSRedirect: o.KubernetesHTTPSRedirect,
+			Mesh:                 o.KubernetesMesh,
+			Daemonset:            o.KubernetesDaemonset,
+			Name:                 o.KubernetesName,
+			Namespace:            o.KubernetesNamespace,
 			IngressClass:         o.KubernetesIngressClass,
 		})
 		if err != nil {

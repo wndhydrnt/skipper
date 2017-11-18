@@ -116,3 +116,19 @@ type serviceSpec struct {
 type service struct {
 	Spec *serviceSpec `json:"spec"`
 }
+
+type daemonsetStatus struct {
+	NumberAvailable int `json:"numberAvailable"`
+}
+
+type daemonsetItem struct {
+	Status *daemonsetStatus `json:"status"`
+}
+
+type deploymentStatus struct {
+	NumberAvailable int `json:"availableReplicas"`
+}
+
+type deploymentItem struct {
+	Status *deploymentStatus `json:"status"`
+}

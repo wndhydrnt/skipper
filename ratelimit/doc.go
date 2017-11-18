@@ -29,22 +29,22 @@ The following command starts skipper with default X-Forwarded-For
 Lookuper, that will start to rate limit after 5 requests within 60s
 from the same client
 
-    % skipper -ratelimits type=local,max-hits=5,time-window=60s
+    % skipper -ratelimits type=client,max-hits=5,time-window=60s
 
 The following configuration will rate limit /foo after 2 requests
 within 90s from the same requester and all other requests after 20
 requests within 60s from the same client
 
     % cat ratelimit.eskip
-    foo: Path("/foo") -> localRatelimit(2,"1m30s") -> "http://www.example.org/foo"
-    rest: Path("/") -> localRatelimit(20,"1m") -> "http://www.example.net/"
+    foo: Path("/foo") -> clientRatelimit(2,"1m30s") -> "http://www.example.org/foo"
+    rest: Path("/") -> clientRatelimit(20,"1m") -> "http://www.example.net/"
     % skipper -enable-ratelimits -routes-file=ratelimit.eskip
 
 The following configuration will rate limit requests after 100
 requests within 1 minute with the same Authorization Header
 
     % cat ratelimit-auth.eskip
-    all: Path("/") -> localRatelimit(100,"1m","auth") -> "http://www.example.org/"
+    all: Path("/") -> clientRatelimit(100,"1m","auth") -> "http://www.example.org/"
     % skipper -enable-ratelimits -routes-file=ratelimit-auth.eskip
 
 Rate limiter settings can be applied globally via command line flags
@@ -53,7 +53,7 @@ or within routing settings.
 Settings - Type
 
 Defines the type of the rate limiter, which right now only allows to
-be "local". In case of a skipper swarm or service mesh this would be
+be "client". In case of a skipper swarm or service mesh this would be
 an interesting configuration option, for example "global" or "dc".
 
 Settings - MaxHits

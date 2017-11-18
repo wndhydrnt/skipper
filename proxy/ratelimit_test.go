@@ -133,7 +133,7 @@ func TestCheckLocalRateLimit(t *testing.T) {
 	r := []*eskip.Route{&eskip.Route{Backend: backend.URL}}
 	timeWindow := 1 * time.Second
 	ratelimitSettings := ratelimit.Settings{
-		Type:          ratelimit.LocalRatelimit,
+		Type:          ratelimit.ClientRatelimit,
 		MaxHits:       10,
 		TimeWindow:    timeWindow,
 		CleanInterval: 2 * timeWindow,

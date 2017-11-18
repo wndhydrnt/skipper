@@ -81,7 +81,7 @@ func (r *Registry) Check(req *http.Request) (Settings, bool) {
 	case ServiceRatelimit:
 		return s, r.Get(s).Allow("")
 
-	case LocalRatelimit:
+	case ClientRatelimit:
 		ip := net.RemoteHost(req)
 		if !r.Get(s).Allow(ip.String()) {
 			return s, false

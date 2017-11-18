@@ -24,8 +24,8 @@ func TestArgs(t *testing.T) {
 	testOK := func(s filters.Spec, args ...interface{}) func(*testing.T) { return test(s, false, args...) }
 	testErr := func(s filters.Spec, args ...interface{}) func(*testing.T) { return test(s, true, args...) }
 
-	t.Run("local", func(t *testing.T) {
-		rl := NewLocalRatelimit()
+	t.Run("client", func(t *testing.T) {
+		rl := NewClientRatelimit()
 		t.Run("missing", testErr(rl, nil))
 	})
 
@@ -86,10 +86,10 @@ func TestRateLimit(t *testing.T) {
 		"1s",
 	))
 
-	t.Run("ratelimit local", test(
-		NewLocalRatelimit,
+	t.Run("ratelimit client", test(
+		NewClientRatelimit,
 		ratelimit.Settings{
-			Type:          ratelimit.LocalRatelimit,
+			Type:          ratelimit.ClientRatelimit,
 			MaxHits:       3,
 			TimeWindow:    1 * time.Second,
 			CleanInterval: 10 * time.Second,

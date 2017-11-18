@@ -9,7 +9,7 @@ import (
 	"github.com/zalando/skipper/net"
 )
 
-// Type defines the type of the used breaker: consecutive, rate or
+// Type defines the type of the used ratelimit: service, client or
 // disabled.
 type Type int
 
@@ -18,8 +18,8 @@ const (
 	Header = "X-Rate-Limit"
 	// ServiceRatelimitName is the name of the Ratelimit filter, which will be shown in log
 	ServiceRatelimitName = "ratelimit"
-	// LocalRatelimitName is the name of the LocalRatelimit filter, which will be shown in log
-	LocalRatelimitName = "localRatelimit"
+	// ClientRatelimitName is the name of the ClientRatelimit filter, which will be shown in log
+	ClientRatelimitName = "clientRatelimit"
 	// DisableRatelimitName is the name of the DisableRatelimit, which will be shown in log
 	DisableRatelimitName = "disableRatelimit"
 )
@@ -31,10 +31,10 @@ const (
 	// backend service, which is calculated and measured within
 	// each instance
 	ServiceRatelimit
-	// LocalRatelimit is used to have a simple local rate limit
+	// ClientRatelimit is used to have a simple client rate limit
 	// per user for a backend, which is calculated and measured
 	// within each instance
-	LocalRatelimit
+	ClientRatelimit
 	// DisableRatelimit is used to disable rate limit
 	DisableRatelimit
 )
@@ -129,8 +129,8 @@ func (s Settings) String() string {
 		return "disable"
 	case ServiceRatelimit:
 		return fmt.Sprintf("ratelimit(type=service,max-hits=%d,time-window=%s)", s.MaxHits, s.TimeWindow)
-	case LocalRatelimit:
-		return fmt.Sprintf("ratelimit(type=local,max-hits=%d,time-window=%s)", s.MaxHits, s.TimeWindow)
+	case ClientRatelimit:
+		return fmt.Sprintf("ratelimit(type=client,max-hits=%d,time-window=%s)", s.MaxHits, s.TimeWindow)
 	default:
 		return "non"
 	}
@@ -179,7 +179,7 @@ func newRatelimit(s Settings) *Ratelimit {
 	switch s.Type {
 	case ServiceRatelimit:
 		impl = circularbuffer.NewRateLimiter(s.MaxHits, s.TimeWindow)
-	case LocalRatelimit:
+	case ClientRatelimit:
 		impl = circularbuffer.NewClientRateLimiter(s.MaxHits, s.TimeWindow, s.CleanInterval)
 	default:
 		impl = voidRatelimit{}

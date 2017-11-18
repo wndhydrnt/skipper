@@ -57,9 +57,9 @@ func TestServiceRatelimit(t *testing.T) {
 	})
 }
 
-func TestLocalRatelimit(t *testing.T) {
+func TestClientRatelimit(t *testing.T) {
 	s := Settings{
-		Type:          LocalRatelimit,
+		Type:          ClientRatelimit,
 		MaxHits:       3,
 		TimeWindow:    3 * time.Second,
 		CleanInterval: 4 * time.Second,
@@ -71,7 +71,7 @@ func TestLocalRatelimit(t *testing.T) {
 		time.Sleep(s.TimeWindow)
 	}
 
-	t.Run("new local ratelimitter", func(t *testing.T) {
+	t.Run("new client ratelimitter", func(t *testing.T) {
 		rl := newRatelimit(s)
 		checkNotRatelimitted(t, rl, client1)
 	})
@@ -134,10 +134,10 @@ func BenchmarkServiceRatelimit(b *testing.B) {
 	}
 }
 
-func BenchmarkLocalRatelimit(b *testing.B) {
+func BenchmarkClientRatelimit(b *testing.B) {
 	maxint := 1 << 21
 	s := Settings{
-		Type:          LocalRatelimit,
+		Type:          ClientRatelimit,
 		MaxHits:       maxint,
 		TimeWindow:    1 * time.Second,
 		CleanInterval: 30 * time.Second,
@@ -150,10 +150,10 @@ func BenchmarkLocalRatelimit(b *testing.B) {
 	}
 }
 
-func BenchmarkLocalRatelimitWithCleaner(b *testing.B) {
+func BenchmarkClientRatelimitWithCleaner(b *testing.B) {
 	maxint := 100
 	s := Settings{
-		Type:          LocalRatelimit,
+		Type:          ClientRatelimit,
 		MaxHits:       maxint,
 		TimeWindow:    100 * time.Millisecond,
 		CleanInterval: 300 * time.Millisecond,
@@ -166,9 +166,9 @@ func BenchmarkLocalRatelimitWithCleaner(b *testing.B) {
 	}
 }
 
-func BenchmarkLocalRatelimitClients1000(b *testing.B) {
+func BenchmarkClientRatelimitClients1000(b *testing.B) {
 	s := Settings{
-		Type:          LocalRatelimit,
+		Type:          ClientRatelimit,
 		MaxHits:       100,
 		TimeWindow:    1 * time.Second,
 		CleanInterval: 30 * time.Second,
@@ -186,10 +186,10 @@ func BenchmarkLocalRatelimitClients1000(b *testing.B) {
 	}
 }
 
-func BenchmarkLocalRatelimitWithCleanerClients1000(b *testing.B) {
+func BenchmarkClientRatelimitWithCleanerClients1000(b *testing.B) {
 	maxint := 100
 	s := Settings{
-		Type:          LocalRatelimit,
+		Type:          ClientRatelimit,
 		MaxHits:       maxint,
 		TimeWindow:    100 * time.Millisecond,
 		CleanInterval: 300 * time.Millisecond,

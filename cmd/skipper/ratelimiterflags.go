@@ -44,7 +44,7 @@ func (r *ratelimitFlags) Set(value string) error {
 		case "type":
 			switch kv[1] {
 			case "local":
-				s.Type = ratelimit.LocalRatelimit
+				s.Type = ratelimit.ClientRatelimit
 			case "service":
 				s.Type = ratelimit.ServiceRatelimit
 			case "disabled":
