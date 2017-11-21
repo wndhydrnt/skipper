@@ -1,7 +1,7 @@
 package builtin
 
 import (
-	"github.com/zalando/skipper/args"
+	"github.com/zalando/skipper/eskip/args"
 	"github.com/zalando/skipper/filters"
 )
 

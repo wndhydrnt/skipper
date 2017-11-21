@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zalando/skipper/args"
 	"github.com/zalando/skipper/eskip"
+	"github.com/zalando/skipper/eskip/args"
 	"github.com/zalando/skipper/filters"
 	"github.com/zalando/skipper/proxy/proxytest"
 )

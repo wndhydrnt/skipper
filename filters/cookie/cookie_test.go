@@ -148,38 +148,40 @@ func TestCreateFilter(t *testing.T) {
 		filter{typ: response, name: "test-cookie", value: "A", ttl: 42 * time.Second, changeOnly: true},
 		false,
 	}} {
-		var s filters.Spec
-		switch ti.typ {
-		case request:
-			s = NewRequestCookie()
-		case response:
-			s = NewResponseCookie()
-		case responseJS:
-			s = NewJSCookie()
-		}
-
-		f, err := s.CreateFilter(ti.args)
-		if err == nil && ti.err || err != nil && !ti.err {
-			t.Error(ti.msg, "failure case", err, ti.err)
-		} else if !ti.err {
-			ff := f.(*filter)
-
-			if ff.typ != ti.typ {
-				t.Error(ti.msg, "direction", ff.typ, ti.typ)
+		t.Run(ti.msg, func(t *testing.T) {
+			var s filters.Spec
+			switch ti.typ {
+			case request:
+				s = NewRequestCookie()
+			case response:
+				s = NewResponseCookie()
+			case responseJS:
+				s = NewJSCookie()
 			}
 
-			if ff.name != ti.check.name {
-				t.Error(ti.msg, "name", ff.name, ti.check.name)
-			}
+			f, err := s.CreateFilter(ti.args)
+			if err == nil && ti.err || err != nil && !ti.err {
+				t.Error(ti.msg, "failure case", err, ti.err)
+			} else if !ti.err {
+				ff := f.(*filter)
 
-			if ff.value != ti.check.value {
-				t.Error(ti.msg, "value", ff.value, ti.check.value)
-			}
+				if ff.typ != ti.typ {
+					t.Error(ti.msg, "direction", ff.typ, ti.typ)
+				}
 
-			if ff.ttl != ti.check.ttl {
-				t.Error(ti.msg, "ttl", ff.ttl, ti.check.ttl)
+				if ff.name != ti.check.name {
+					t.Error(ti.msg, "name", ff.name, ti.check.name)
+				}
+
+				if ff.value != ti.check.value {
+					t.Error(ti.msg, "value", ff.value, ti.check.value)
+				}
+
+				if ff.ttl != ti.check.ttl {
+					t.Error(ti.msg, "ttl", ff.ttl, ti.check.ttl)
+				}
 			}
-		}
+		})
 	}
 }
 

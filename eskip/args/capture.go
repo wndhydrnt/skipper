@@ -7,10 +7,15 @@ import (
 )
 
 type enum struct {
-	options    []string
-	valid      bool
-	isVariadic bool
-	p          interface{}
+	options []string
+	p       interface{}
+	invalid bool
+}
+
+type duration struct {
+	unit    time.Duration
+	p       interface{}
+	invalid bool
 }
 
 type optional struct {
@@ -36,6 +41,7 @@ var (
 	errNotVariadicPosition      = errors.New("variadic must be the last arg")
 	errInvalidEnum              = errors.New("invalid enum")
 	errExpetingOptionalOrVararg = errors.New("expecting optional or vararg")
+	errInvalidDurationCapture   = errors.New("invalid duration definition capture")
 )
 
 func splitArgs(a []interface{}) (captures []interface{}, args []interface{}, err error) {
@@ -71,12 +77,18 @@ func validateCapture(capture interface{}, f captureFlags) error {
 		if f&hasArgs == 0 {
 			return ErrInvalidArgs
 		}
+	case duration:
+		if p.invalid {
+			return errInvalidDurationCapture
+		}
+
+		return validateCapture(p.p, f)
 	case *[]int, *[]float64, *[]string, *[]time.Duration, *[]interface{}:
 		if f&expectingSingle != 0 || f&lastPosition == 0 {
 			return errNotVariadicPosition
 		}
 	case enum:
-		if !p.valid {
+		if p.invalid {
 			return errInvalidEnum
 		}
 
@@ -194,13 +206,12 @@ func captureEnums(options []string, a []interface{}) ([]string, error) {
 	return enums, nil
 }
 
-func captureDuration(a interface{}) (time.Duration, error) {
+func captureDuration(a interface{}, unit time.Duration) (time.Duration, error) {
 	switch v := a.(type) {
 	case int:
-		return time.Duration(v) * time.Millisecond, nil
+		return time.Duration(v) * unit, nil
 	case float64:
-		scale := float64(time.Millisecond) / float64(time.Nanosecond)
-		return time.Duration(v*scale) * time.Millisecond / time.Duration(scale), nil
+		return time.Duration(v * float64(unit)), nil
 	case string:
 		d, err := time.ParseDuration(v)
 		if err != nil {
@@ -213,11 +224,11 @@ func captureDuration(a interface{}) (time.Duration, error) {
 	}
 }
 
-func captureDurations(a []interface{}) ([]time.Duration, error) {
+func captureDurations(a []interface{}, unit time.Duration) ([]time.Duration, error) {
 	var durations []time.Duration
 	for i := range a {
 		log.Println(a[i])
-		v, err := captureDuration(a[i])
+		v, err := captureDuration(a[i], unit)
 		if err != nil {
 			return nil, ErrInvalidArgs
 		}
@@ -253,7 +264,7 @@ func captureArg(capture interface{}, a []interface{}, f captureFlags) (nextFlags
 	case *string:
 		*p, err = captureString(a[0])
 	case *time.Duration:
-		*p, err = captureDuration(a[0])
+		*p, err = captureDuration(a[0], time.Millisecond)
 	case *[]int:
 		*p, err = captureInts(a)
 		nextFlags |= varargsConsumed
@@ -264,17 +275,26 @@ func captureArg(capture interface{}, a []interface{}, f captureFlags) (nextFlags
 		*p, err = captureStrings(a)
 		nextFlags |= varargsConsumed
 	case *[]time.Duration:
-		*p, err = captureDurations(a)
+		*p, err = captureDurations(a, time.Millisecond)
 		nextFlags |= varargsConsumed
 	case *[]interface{}:
 		*p, err = captureMixed(a)
 		nextFlags |= varargsConsumed
 	case enum:
-		if p.isVariadic {
+		switch p.p.(type) {
+		case *[]string:
 			*p.p.(*[]string), err = captureEnums(p.options, a)
 			nextFlags |= varargsConsumed
-		} else {
+		case *string:
 			*p.p.(*string), err = captureEnum(p.options, a[0])
+		}
+	case duration:
+		switch p.p.(type) {
+		case *[]time.Duration:
+			*p.p.(*[]time.Duration), err = captureDurations(a, p.unit)
+			nextFlags |= varargsConsumed
+		case *time.Duration:
+			*p.p.(*time.Duration), err = captureDuration(a[0], p.unit)
 		}
 	case optional:
 		if f&hasArgs != 0 {
@@ -305,9 +325,10 @@ func Capture(a ...interface{}) error {
 	var (
 		index   int
 		capture interface{}
+		f       captureFlags
 	)
 
-	f := hasArgs
+	f = hasArgs
 	for index, capture = range captures {
 		if len(args) == index {
 			f = f &^ hasArgs
@@ -337,30 +358,32 @@ func Capture(a ...interface{}) error {
 
 func Enum(a interface{}, options ...string) interface{} {
 	switch p := a.(type) {
-	case *string:
+	case *string, *[]string:
 		return enum{
 			options: options,
-			valid:   true,
 			p:       p,
-		}
-	case *[]string:
-		return enum{
-			options:    options,
-			valid:      true,
-			isVariadic: true,
-			p:          p,
 		}
 	case optional:
 		return Optional(Enum(p.p, options...))
 	default:
-		return enum{}
+		return enum{invalid: true}
+	}
+}
+
+func Duration(a interface{}, unit time.Duration) interface{} {
+	switch p := a.(type) {
+	case *time.Duration, *[]time.Duration:
+		return duration{
+			unit: unit,
+			p:    p,
+		}
+	case optional:
+		return Optional(Duration(p.p, unit))
+	default:
+		return duration{invalid: true}
 	}
 }
 
 func Optional(a interface{}) interface{} {
 	return optional{a}
-}
-
-func Duration(a interface{}, unit time.Duration) interface{} {
-	return nil
 }

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/zalando/skipper/args"
+	"github.com/zalando/skipper/eskip/args"
 	"github.com/zalando/skipper/filters"
 	"github.com/zalando/skipper/filters/serve"
 )

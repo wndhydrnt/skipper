@@ -8,6 +8,7 @@ package ratelimit
 import (
 	"time"
 
+	"github.com/zalando/skipper/eskip/args"
 	"github.com/zalando/skipper/filters"
 	"github.com/zalando/skipper/ratelimit"
 )
@@ -74,73 +75,46 @@ func (s *spec) Name() string {
 	return s.filterName
 }
 
-func serviceRatelimitFilter(args []interface{}) (filters.Filter, error) {
-	if len(args) != 2 {
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
-	var err error
-	var maxHits int
-	if len(args) > 0 {
-		maxHits, err = getIntArg(args[0])
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	var timeWindow time.Duration
-	if len(args) > 1 {
-		timeWindow, err = getDurationArg(args[1])
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return &filter{
+func serviceRatelimitFilter(a []interface{}) (filters.Filter, error) {
+	f := filter{
 		settings: ratelimit.Settings{
-			Type:       ratelimit.ServiceRatelimit,
-			MaxHits:    maxHits,
-			TimeWindow: timeWindow,
-			Lookuper:   ratelimit.NewSameBucketLookuper(),
+			Type:     ratelimit.ServiceRatelimit,
+			Lookuper: ratelimit.NewSameBucketLookuper(),
 		},
-	}, nil
+	}
+
+	if err := args.Capture(
+		&f.settings.MaxHits,
+		args.Duration(&f.settings.TimeWindow, time.Second),
+		a,
+	); err != nil {
+		return nil, err
+	}
+
+	return &f, nil
 }
 
-func localRatelimitFilter(args []interface{}) (filters.Filter, error) {
-	if !(len(args) == 2 || len(args) == 3) {
-		return nil, filters.ErrInvalidFilterParameters
+func localRatelimitFilter(a []interface{}) (filters.Filter, error) {
+	var (
+		maxHits    int
+		timeWindow time.Duration
+		lookupType string
+		lookuper   ratelimit.Lookuper
+	)
+
+	if err := args.Capture(
+		&maxHits,
+		args.Duration(&timeWindow, time.Second),
+		args.Optional(args.Enum(&lookupType, "auth", "ip")),
+		a,
+	); err != nil {
+		return nil, err
 	}
 
-	var err error
-	var maxHits int
-	if len(args) > 0 {
-		maxHits, err = getIntArg(args[0])
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	var timeWindow time.Duration
-	if len(args) > 1 {
-		timeWindow, err = getDurationArg(args[1])
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	var lookuper ratelimit.Lookuper
-	if len(args) > 2 {
-		lookuperName, err := getStringArg(args[2])
-		if err != nil {
-			return nil, err
-		}
-		switch lookuperName {
-		case "auth":
-			lookuper = ratelimit.NewAuthLookuper()
-		default:
-			lookuper = ratelimit.NewXForwardedForLookuper()
-		}
-	} else {
+	switch lookupType {
+	case "auth":
+		lookuper = ratelimit.NewAuthLookuper()
+	default:
 		lookuper = ratelimit.NewXForwardedForLookuper()
 	}
 
@@ -172,35 +146,6 @@ func (s *spec) CreateFilter(args []interface{}) (filters.Filter, error) {
 	default:
 		return disableFilter(args)
 	}
-}
-
-func getIntArg(a interface{}) (int, error) {
-	if i, ok := a.(int); ok {
-		return i, nil
-	}
-
-	if f, ok := a.(float64); ok {
-		return int(f), nil
-	}
-
-	return 0, filters.ErrInvalidFilterParameters
-}
-
-func getStringArg(a interface{}) (string, error) {
-	if s, ok := a.(string); ok {
-		return s, nil
-	}
-
-	return "", filters.ErrInvalidFilterParameters
-}
-
-func getDurationArg(a interface{}) (time.Duration, error) {
-	if s, ok := a.(string); ok {
-		return time.ParseDuration(s)
-	}
-
-	i, err := getIntArg(a)
-	return time.Duration(i) * time.Second, err
 }
 
 // Request stores the configured ratelimit.Settings in the state bag,

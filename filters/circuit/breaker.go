@@ -6,8 +6,8 @@ For detailed documentation of the circuit breakers, see https://godoc.org/github
 package circuit
 
 import (
-	"github.com/zalando/skipper/args"
 	"github.com/zalando/skipper/circuit"
+	"github.com/zalando/skipper/eskip/args"
 	"github.com/zalando/skipper/filters"
 )
 

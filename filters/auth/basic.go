@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	auth "github.com/abbot/go-http-auth"
-	"github.com/zalando/skipper/args"
+	"github.com/zalando/skipper/eskip/args"
 	"github.com/zalando/skipper/filters"
 )
 

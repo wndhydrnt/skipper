@@ -40,7 +40,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zalando/skipper/args"
+	"github.com/zalando/skipper/eskip/args"
 	"github.com/zalando/skipper/filters"
 )
 
@@ -104,7 +104,7 @@ func (s *spec) CreateFilter(a []interface{}) (filters.Filter, error) {
 	case response, responseJS:
 		capture = append(
 			capture,
-			args.Optional(&f.ttl),
+			args.Optional(args.Duration(&f.ttl, time.Second)),
 			args.Optional(args.Enum(&changeOnly, AlwaysSetArg, ChangeOnlyArg)),
 		)
 	}
@@ -118,10 +118,6 @@ func (s *spec) CreateFilter(a []interface{}) (filters.Filter, error) {
 		return nil, args.ErrInvalidArgs
 	}
 
-	// compat:
-	if f.ttl != 0 {
-		f.ttl = f.ttl * time.Second / time.Millisecond
-	}
 	f.changeOnly = changeOnly == ChangeOnlyArg
 
 	return &f, nil

@@ -2,9 +2,10 @@ package flowid
 
 import (
 	"fmt"
-	"github.com/zalando/skipper/filters"
 	"log"
-	"strings"
+
+	"github.com/zalando/skipper/eskip/args"
+	"github.com/zalando/skipper/filters"
 )
 
 const (
@@ -88,19 +89,27 @@ func (_ *flowId) Response(filters.FilterContext) {}
 // If at least 1 argument is present and it contains the value "reuse", the filter instance is configured to accept
 // keep the value of the X-Flow-Id header, if it's already set
 func (spec *flowIdSpec) CreateFilter(fc []interface{}) (filters.Filter, error) {
-	var reuseExisting bool
-	if len(fc) > 0 {
-		if r, ok := fc[0].(string); ok {
-			reuseExisting = strings.ToLower(r) == ReuseParameterValue
-		} else {
-			return nil, filters.ErrInvalidFilterParameters
-		}
-		if len(fc) > 1 {
-			log.Println("flow id filter warning: this syntaxt is deprecated and will be removed soon. " +
-				"please check updated docs")
+	var (
+		reuseExisting string
+		ignored       []interface{}
+	)
+	if err := args.Capture(args.Optional(&reuseExisting), &ignored, fc); err != nil {
+		if err != nil {
+			return nil, err
 		}
 	}
-	return &flowId{reuseExisting: reuseExisting, generator: spec.generator}, nil
+
+	// TODO: breaking change, use a single optional enum
+	if len(ignored) > 0 {
+		println("logging")
+		log.Println("flow id filter warning: this syntax is deprecated and will be removed soon. " +
+			"please check updated docs")
+	}
+
+	return &flowId{
+		reuseExisting: reuseExisting == ReuseParameterValue,
+		generator:     spec.generator,
+	}, nil
 }
 
 // Name returns the canonical filter name

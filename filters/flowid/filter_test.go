@@ -3,12 +3,14 @@ package flowid
 import (
 	"bytes"
 	"fmt"
-	"github.com/zalando/skipper/filters"
-	"github.com/zalando/skipper/filters/filtertest"
 	"log"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/zalando/skipper/eskip/args"
+	"github.com/zalando/skipper/filters"
+	"github.com/zalando/skipper/filters/filtertest"
 )
 
 const (
@@ -69,13 +71,13 @@ func TestFlowIdRejectInvalidReusedFlowId(t *testing.T) {
 func TestFlowIdWithInvalidParameters(t *testing.T) {
 	fc := []interface{}{true}
 	_, err := testFlowIdSpec.CreateFilter(fc)
-	if err != filters.ErrInvalidFilterParameters {
+	if err != args.ErrInvalidArgs {
 		t.Errorf("expected an invalid parameters error, got %v", err)
 	}
 
 	fc = []interface{}{1}
 	_, err = testFlowIdSpec.CreateFilter(fc)
-	if err != filters.ErrInvalidFilterParameters {
+	if err != args.ErrInvalidArgs {
 		t.Errorf("expected an invalid parameters error, got %v", err)
 	}
 }
@@ -83,7 +85,7 @@ func TestFlowIdWithInvalidParameters(t *testing.T) {
 func TestDeprecationNotice(t *testing.T) {
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
-	fc := []interface{}{"", true}
+	fc := []interface{}{"", "true"}
 	_, err := testFlowIdSpec.CreateFilter(fc)
 	if err == filters.ErrInvalidFilterParameters {
 		t.Error("unexpected error creating a filter")
@@ -94,7 +96,7 @@ func TestDeprecationNotice(t *testing.T) {
 		t.Error("no warning output produced")
 	}
 
-	if !(strings.Contains(logOutput, "warning") || strings.Contains(logOutput, "deprecated")) {
+	if !strings.Contains(logOutput, "warning") || !strings.Contains(logOutput, "deprecated") {
 		t.Error("missing deprecation keywords from the output produced")
 	}
 }
