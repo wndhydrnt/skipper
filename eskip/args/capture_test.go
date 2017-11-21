@@ -10,8 +10,8 @@ import (
 
 func TestNoArgsExpected(t *testing.T) {
 	t.Run("fail, no args position", func(t *testing.T) {
-		if err := Capture(); err != ErrInvalidArgs {
-			t.Error("failed to fail", err, ErrInvalidArgs)
+		if err := Capture(); err == nil {
+			t.Error("failed to fail")
 		}
 	})
 

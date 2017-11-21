@@ -66,10 +66,15 @@ func TestCreate(t *testing.T) {
 		predicate{chance: .3, trafficGroup: "group", trafficGroupCookie: "testname"},
 		false,
 	}} {
-		pi, err := (&spec{}).Create(ti.args)
-		if err == nil && ti.err || err != nil && !ti.err {
-			t.Error(ti.msg, "failure case", err, ti.err)
-		} else if err == nil {
+		t.Run(ti.msg, func(t *testing.T) {
+			pi, err := (&spec{}).Create(ti.args)
+			if err == nil && ti.err || err != nil && !ti.err {
+				t.Error(ti.msg, "failure case", err, ti.err)
+				return
+			} else if err != nil {
+				return
+			}
+
 			p := pi.(*predicate)
 			if p.chance != ti.check.chance {
 				t.Error(ti.msg, "chance", p.chance, ti.check.chance)
@@ -82,7 +87,7 @@ func TestCreate(t *testing.T) {
 			if p.trafficGroupCookie != ti.check.trafficGroupCookie {
 				t.Error(ti.msg, "traffic group cookie", p.trafficGroupCookie, ti.check.trafficGroupCookie)
 			}
-		}
+		})
 	}
 }
 

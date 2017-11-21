@@ -2,7 +2,6 @@ package args
 
 import (
 	"errors"
-	"log"
 	"time"
 )
 
@@ -46,7 +45,7 @@ var (
 
 func splitArgs(a []interface{}) (captures []interface{}, args []interface{}, err error) {
 	if len(a) == 0 {
-		err = ErrInvalidArgs
+		err = errArgPositionType
 		return
 	}
 
@@ -69,7 +68,7 @@ func splitArgs(a []interface{}) (captures []interface{}, args []interface{}, err
 
 func validateCapture(capture interface{}, f captureFlags) error {
 	switch p := capture.(type) {
-	case *int, *float64, *string, *time.Duration:
+	case *int, *float64, *string, *time.Duration, *time.Time:
 		if f&expectingOptional != 0 {
 			return errExpetingOptionalOrVararg
 		}
@@ -83,7 +82,7 @@ func validateCapture(capture interface{}, f captureFlags) error {
 		}
 
 		return validateCapture(p.p, f)
-	case *[]int, *[]float64, *[]string, *[]time.Duration, *[]interface{}:
+	case *[]int, *[]float64, *[]string, *[]time.Duration, *[]time.Time, *[]interface{}:
 		if f&expectingSingle != 0 || f&lastPosition == 0 {
 			return errNotVariadicPosition
 		}
@@ -227,7 +226,6 @@ func captureDuration(a interface{}, unit time.Duration) (time.Duration, error) {
 func captureDurations(a []interface{}, unit time.Duration) ([]time.Duration, error) {
 	var durations []time.Duration
 	for i := range a {
-		log.Println(a[i])
 		v, err := captureDuration(a[i], unit)
 		if err != nil {
 			return nil, ErrInvalidArgs
@@ -237,6 +235,38 @@ func captureDurations(a []interface{}, unit time.Duration) ([]time.Duration, err
 	}
 
 	return durations, nil
+}
+
+func captureTime(a interface{}) (time.Time, error) {
+	switch v := a.(type) {
+	case int:
+		return time.Unix(int64(v), 0), nil
+	case float64:
+		return time.Unix(int64(v), 0), nil
+	case string:
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			err = ErrInvalidArgs
+		}
+
+		return t, err
+	default:
+		return time.Time{}, ErrInvalidArgs
+	}
+}
+
+func captureTimes(a []interface{}) ([]time.Time, error) {
+	var times []time.Time
+	for i := range a {
+		v, err := captureTime(a[i])
+		if err != nil {
+			return nil, ErrInvalidArgs
+		}
+
+		times = append(times, v)
+	}
+
+	return times, nil
 }
 
 func captureMixed(a []interface{}) ([]interface{}, error) {
@@ -265,6 +295,8 @@ func captureArg(capture interface{}, a []interface{}, f captureFlags) (nextFlags
 		*p, err = captureString(a[0])
 	case *time.Duration:
 		*p, err = captureDuration(a[0], time.Millisecond)
+	case *time.Time:
+		*p, err = captureTime(a[0])
 	case *[]int:
 		*p, err = captureInts(a)
 		nextFlags |= varargsConsumed
@@ -276,6 +308,9 @@ func captureArg(capture interface{}, a []interface{}, f captureFlags) (nextFlags
 		nextFlags |= varargsConsumed
 	case *[]time.Duration:
 		*p, err = captureDurations(a, time.Millisecond)
+		nextFlags |= varargsConsumed
+	case *[]time.Time:
+		*p, err = captureTimes(a)
 		nextFlags |= varargsConsumed
 	case *[]interface{}:
 		*p, err = captureMixed(a)

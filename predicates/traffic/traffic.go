@@ -73,7 +73,7 @@ import (
 	"math/rand"
 	"net/http"
 
-	"github.com/zalando/skipper/predicates"
+	"github.com/zalando/skipper/eskip/args"
 	"github.com/zalando/skipper/routing"
 )
 
@@ -95,30 +95,32 @@ func New() routing.PredicateSpec { return &spec{} }
 
 func (s *spec) Name() string { return PredicateName }
 
-func (s *spec) Create(args []interface{}) (routing.Predicate, error) {
-	if !(len(args) == 1 || len(args) == 3) {
-		return nil, predicates.ErrInvalidPredicateParameters
-	}
+func (s *spec) Create(a []interface{}) (routing.Predicate, error) {
+	stickyTraffic := len(a) > 1
 
-	p := &predicate{}
-
-	if c, ok := args[0].(float64); ok && 0.0 <= c && c < 1.0 {
-		p.chance = c
+	var (
+		chance            float64
+		trafficCookieName string
+		trafficGroup      string
+	)
+	if stickyTraffic {
+		if err := args.Capture(&chance, &trafficCookieName, &trafficGroup, a); err != nil {
+			return nil, err
+		}
 	} else {
-		return nil, predicates.ErrInvalidPredicateParameters
+		if err := args.Capture(&chance, a); err != nil {
+			return nil, err
+		}
 	}
 
-	if len(args) == 3 {
-		if tgc, ok := args[1].(string); ok {
-			p.trafficGroupCookie = tgc
-		} else {
-			return nil, predicates.ErrInvalidPredicateParameters
-		}
-		if tg, ok := args[2].(string); ok {
-			p.trafficGroup = tg
-		} else {
-			return nil, predicates.ErrInvalidPredicateParameters
-		}
+	if chance < 0 || chance > 1 {
+		return nil, args.ErrInvalidArgs
+	}
+
+	p := &predicate{chance: chance}
+	if stickyTraffic {
+		p.trafficGroupCookie = trafficCookieName
+		p.trafficGroup = trafficGroup
 	}
 
 	return p, nil

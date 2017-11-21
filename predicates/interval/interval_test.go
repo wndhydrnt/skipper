@@ -13,28 +13,18 @@ func TestCreateBetween(t *testing.T) {
 		err  bool
 	}{
 		{
-			"nil arguments",
+			"no arguments",
 			nil,
 			true,
 		},
 		{
-			"wrong number of arguments",
+			"one argument",
 			[]interface{}{"2016-01-01T12:00:00+07:00"},
 			true,
 		},
 		{
-			"wrong number of arguments",
+			"too many arguments",
 			[]interface{}{"2016-01-01T12:00:00+07:00", "2016-02-01T12:00:00+07:00", "2016-03-01T12:00:00+07:00"},
-			true,
-		},
-		{
-			"first argument is not a string",
-			[]interface{}{1, "2016-01-01T12:00:00+07:00"},
-			true,
-		},
-		{
-			"second argument is not a string",
-			[]interface{}{"2016-01-01T12:00:00+07:00", 1},
 			true,
 		},
 		{
@@ -59,17 +49,18 @@ func TestCreateBetween(t *testing.T) {
 		},
 		{
 			"valid interval using Unix time",
-			[]interface{}{float64(1451649600), float64(1454328000)},
+			[]interface{}{1451649600, 1454328000.42},
 			false,
 		},
 	}
 
 	for _, c := range cases {
-		_, err := NewBetween().Create(c.args)
-
-		if err == nil && c.err || err != nil && !c.err {
-			t.Errorf("%q: Is error case - %t; Error - %v", c.msg, c.err, err)
-		}
+		t.Run(c.msg, func(t *testing.T) {
+			_, err := NewBetween().Create(c.args)
+			if err == nil && c.err || err != nil && !c.err {
+				t.Errorf("%q: Is error case - %t; Error - %v", c.msg, c.err, err)
+			}
+		})
 	}
 }
 
@@ -90,11 +81,6 @@ func TestCreateBefore(t *testing.T) {
 			true,
 		},
 		{
-			"argument is not a string",
-			[]interface{}{1},
-			true,
-		},
-		{
 			"valid string argument",
 			[]interface{}{"2016-01-01T12:00:00+07:00"},
 			false,
@@ -107,11 +93,12 @@ func TestCreateBefore(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		_, err := NewBefore().Create(c.args)
-
-		if err == nil && c.err || err != nil && !c.err {
-			t.Errorf("%q: Is error case - %t; Error - %v", c.msg, c.err, err)
-		}
+		t.Run(c.msg, func(t *testing.T) {
+			_, err := NewBefore().Create(c.args)
+			if err == nil && c.err || err != nil && !c.err {
+				t.Errorf("%q: Is error case - %t; Error - %v", c.msg, c.err, err)
+			}
+		})
 	}
 }
 
@@ -132,11 +119,6 @@ func TestCreateAfter(t *testing.T) {
 			true,
 		},
 		{
-			"argument is not a string",
-			[]interface{}{1},
-			true,
-		},
-		{
 			"valid string argument",
 			[]interface{}{"2016-01-01T12:00:00+07:00"},
 			false,
@@ -149,11 +131,12 @@ func TestCreateAfter(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		_, err := NewAfter().Create(c.args)
-
-		if err == nil && c.err || err != nil && !c.err {
-			t.Errorf("%q: Is error case - %t; Error - %v", c.msg, c.err, err)
-		}
+		t.Run(c.msg, func(t *testing.T) {
+			_, err := NewAfter().Create(c.args)
+			if err == nil && c.err || err != nil && !c.err {
+				t.Errorf("%q: Is error case - %t; Error - %v", c.msg, c.err, err)
+			}
+		})
 	}
 }
 

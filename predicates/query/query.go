@@ -27,10 +27,11 @@ Examples:
 package query
 
 import (
-	"github.com/zalando/skipper/predicates"
-	"github.com/zalando/skipper/routing"
 	"net/http"
 	"regexp"
+
+	"github.com/zalando/skipper/eskip/args"
+	"github.com/zalando/skipper/routing"
 )
 
 type matchType int
@@ -56,32 +57,23 @@ func (s *spec) Name() string {
 	return name
 }
 
-func (s *spec) Create(args []interface{}) (routing.Predicate, error) {
-	if len(args) == 0 || len(args) > 2 {
-		return nil, predicates.ErrInvalidPredicateParameters
+func (s *spec) Create(a []interface{}) (routing.Predicate, error) {
+	var name, value string
+	if err := args.Capture(&name, args.Optional(&value), a); err != nil {
+		return nil, err
 	}
 
-	name, ok1 := args[0].(string)
-
-	switch {
-	case !ok1:
-		return nil, predicates.ErrInvalidPredicateParameters
-	case len(args) == 1:
-		return &predicate{exists, name, nil}, nil
-	case len(args) == 2:
-		value, ok2 := args[1].(string)
-		if !ok2 {
-			return nil, predicates.ErrInvalidPredicateParameters
-		}
-		valueExp, err := regexp.Compile(value)
-		if err != nil {
+	typ := exists
+	var valueExp *regexp.Regexp
+	if value != "" {
+		typ = matches
+		var err error
+		if valueExp, err = regexp.Compile(value); err != nil {
 			return nil, err
 		}
-		return &predicate{matches, name, valueExp}, nil
-	default:
-		return nil, predicates.ErrInvalidPredicateParameters
 	}
 
+	return &predicate{typ, name, valueExp}, nil
 }
 
 func (p *predicate) Match(r *http.Request) bool {

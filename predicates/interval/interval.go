@@ -37,7 +37,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/zalando/skipper/predicates"
+	"github.com/zalando/skipper/eskip/args"
 	"github.com/zalando/skipper/routing"
 )
 
@@ -82,66 +82,35 @@ func (s *spec) Name() string {
 	}
 }
 
-func (s *spec) Create(args []interface{}) (routing.Predicate, error) {
-	switch s.typ {
-	case between:
-		if len(args) != 2 {
-			return nil, predicates.ErrInvalidPredicateParameters
-		}
-	default:
-		if len(args) != 1 {
-			return nil, predicates.ErrInvalidPredicateParameters
-		}
-	}
+func defaultGetTime() time.Time {
+	return time.Now()
+}
 
-	defaultGetTime := func() time.Time {
-		return time.Now()
-	}
-
+func (s *spec) Create(a []interface{}) (routing.Predicate, error) {
 	switch s.typ {
-	case between:
-		if begin, end, ok := parseArgs(args[0], args[1]); ok {
-			if begin.Before(end) {
-				return &predicate{s.typ, begin, end, defaultGetTime}, nil
-			}
-		}
 	case before:
-		if end, ok := parseArg(args[0]); ok {
-			return &predicate{typ: s.typ, end: end, getTime: defaultGetTime}, nil
+		var t time.Time
+		if err := args.Capture(&t, a); err != nil {
+			return nil, err
 		}
+
+		return &predicate{typ: before, end: t, getTime: defaultGetTime}, nil
 	case after:
-		if begin, ok := parseArg(args[0]); ok {
-			return &predicate{typ: s.typ, begin: begin, getTime: defaultGetTime}, nil
+		var t time.Time
+		if err := args.Capture(&t, a); err != nil {
+			return nil, err
 		}
-	}
 
-	return nil, predicates.ErrInvalidPredicateParameters
-}
-
-func parseArgs(arg1, arg2 interface{}) (time.Time, time.Time, bool) {
-	if begin, ok := parseArg(arg1); ok {
-		if end, ok := parseArg(arg2); ok {
-			return begin, end, true
+		return &predicate{typ: after, begin: t, getTime: defaultGetTime}, nil
+	default:
+		var from, to time.Time
+		err := args.Capture(&from, &to, a)
+		if err != nil || !from.Before(to) {
+			return nil, args.ErrInvalidArgs
 		}
+
+		return &predicate{between, from, to, defaultGetTime}, nil
 	}
-
-	return time.Time{}, time.Time{}, false
-}
-
-func parseArg(arg interface{}) (time.Time, bool) {
-	switch a := arg.(type) {
-	case string:
-		t, err := time.Parse(time.RFC3339, a)
-		if err == nil {
-			return t, true
-		}
-	case float64:
-		return time.Unix(int64(a), 0), true
-	case int64:
-		return time.Unix(a, 0), true
-	}
-
-	return time.Time{}, false
 }
 
 func (p *predicate) Match(r *http.Request) bool {

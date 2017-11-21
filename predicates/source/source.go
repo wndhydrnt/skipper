@@ -34,11 +34,13 @@ package source
 
 import (
 	"errors"
-	snet "github.com/zalando/skipper/net"
-	"github.com/zalando/skipper/routing"
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/zalando/skipper/eskip/args"
+	snet "github.com/zalando/skipper/net"
+	"github.com/zalando/skipper/routing"
 )
 
 const Name = "Source"
@@ -57,29 +59,27 @@ func (s *spec) Name() string {
 	return Name
 }
 
-func (s *spec) Create(args []interface{}) (routing.Predicate, error) {
-	if len(args) == 0 {
-		return nil, InvalidArgsError
+func (s *spec) Create(a []interface{}) (routing.Predicate, error) {
+	var (
+		first string
+		rest  []string
+	)
+	if err := args.Capture(&first, &rest, a); err != nil {
+		return nil, err
 	}
 
 	p := &predicate{}
-
-	for i := range args {
-		if s, ok := args[i].(string); ok {
-			var netmask = s
-			if !strings.Contains(s, "/") {
-				netmask = s + "/32"
-			}
-			_, net, err := net.ParseCIDR(netmask)
-
-			if err != nil {
-				return nil, InvalidArgsError
-			}
-
-			p.acceptedSourceNets = append(p.acceptedSourceNets, *net)
-		} else {
-			return nil, InvalidArgsError
+	for _, netmask := range append([]string{first}, rest...) {
+		if !strings.Contains(netmask, "/") {
+			netmask += "/32"
 		}
+
+		_, net, err := net.ParseCIDR(netmask)
+		if err != nil {
+			return nil, args.ErrInvalidArgs
+		}
+
+		p.acceptedSourceNets = append(p.acceptedSourceNets, *net)
 	}
 
 	return p, nil
