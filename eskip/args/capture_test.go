@@ -683,3 +683,138 @@ func TestOptionalArgs(t *testing.T) {
 		}
 	})
 }
+
+func TestDuration(t *testing.T) {
+	t.Run("duration with unit", func(t *testing.T) {
+		var d time.Duration
+		if err := Capture(Duration(&d, time.Second), []interface{}{3.14}); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if d < time.Duration(3.139 * float64(time.Second)) ||
+			d > time.Duration(3.141 * float64(time.Second)) {
+			t.Error("failed to parse duration with unit")
+		}
+	})
+
+	t.Run("normalize optional operator", func(t *testing.T) {
+		var d time.Duration
+		if err := Capture(Duration(Optional(&d), time.Second), nil); err != nil {
+			t.Error(err)
+		}
+	})
+
+	t.Run("invalid duration definition", func(t *testing.T) {
+		var d string
+		if err := Capture(Duration(&d, time.Second), []interface{}{42}); err == nil {
+			t.Error("failed to fail")
+		}
+	})
+
+	t.Run("variadic duration with unit", func(t *testing.T) {
+		var d []time.Duration
+		if err := Capture(Duration(&d, time.Second), []interface{}{1, 2, 3}); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if !reflect.DeepEqual(d, []time.Duration{time.Second, 2 * time.Second, 3 * time.Second}) {
+			t.Error("failed to parse variadic durations")
+		}
+	})
+}
+
+func TestTime(t *testing.T) {
+	t.Run("capture time string", func(t *testing.T) {
+		var tim time.Time
+		if err := Capture(&tim, []interface{}{"3000-12-18T09:36:18+09:00"}); err != nil {
+			t.Error(err)
+			return
+		}
+
+		expected := time.Date(3000, 12, 18, 9, 36, 18, 0, time.FixedZone("+0900", 32400))
+		if !tim.Equal(expected) {
+			t.Error("failed to parse time")
+			t.Log("got:     ", tim)
+			t.Log("expected:", expected)
+		}
+	})
+
+	t.Run("capture time int", func(t *testing.T) {
+		var tim time.Time
+		if err := Capture(&tim, []interface{}{1511277065}); err != nil {
+			t.Error(err)
+			return
+		}
+
+		expected := time.Unix(1511277065, 0)
+		if !tim.Equal(expected) {
+			t.Error("failed to parse time")
+			t.Log("got:     ", tim)
+			t.Log("expected:", expected)
+		}
+	})
+
+	t.Run("capture time float", func(t *testing.T) {
+		var tim time.Time
+		if err := Capture(&tim, []interface{}{1511277065.42}); err != nil {
+			t.Error(err)
+			return
+		}
+
+		expectedLess := time.Unix(1511277065, 39 * int64(time.Second / time.Nanosecond) / 100)
+		expectedMore := time.Unix(1511277065, 43 * int64(time.Second / time.Nanosecond) / 100)
+		if tim.Before(expectedLess) || tim.After(expectedMore) {
+			t.Error("failed to parse time")
+			t.Log("got:     ", tim)
+		}
+	})
+
+	t.Run("invalid time string", func(t *testing.T) {
+		var tim time.Time
+		if err := Capture(&tim, []interface{}{"foo"}); err != ErrInvalidArgs {
+			t.Error("failed to fail", err, ErrInvalidArgs)
+		}
+	})
+
+	t.Run("not supported argument type", func(t *testing.T) {
+		var tim time.Time
+		if err := Capture(&tim, []interface{}{true}); err != ErrInvalidArgs {
+			t.Error("failed to fail", err, ErrInvalidArgs)
+		}
+	})
+
+	t.Run("capture variadic time arguments", func(t *testing.T) {
+		var times []time.Time
+
+		now := time.Now()
+		expected := []time.Time{
+			time.Unix(now.Add(-time.Second).Unix(), 0),
+			time.Unix(now.Unix(), 0),
+			time.Unix(now.Add(time.Second).Unix(), 0),
+		}
+
+		if err := Capture(&times, []interface{}{
+			int(expected[0].Unix()),
+			int(expected[1].Unix()),
+			int(expected[2].Unix()),
+		}); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if !reflect.DeepEqual(times[0], expected[0]) {
+			t.Error("failed to capture variadic times")
+			t.Log("got:     ", times[0])
+			t.Log("expected:", expected[0])
+		}
+	})
+
+	t.Run("capture variadic time arguments, fail", func(t *testing.T) {
+		var times []time.Time
+		if err := Capture(&times, []interface{}{"foo"}); err != ErrInvalidArgs {
+			t.Error("failed to fail", err, ErrInvalidArgs)
+		}
+	})
+}

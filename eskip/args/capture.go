@@ -242,7 +242,10 @@ func captureTime(a interface{}) (time.Time, error) {
 	case int:
 		return time.Unix(int64(v), 0), nil
 	case float64:
-		return time.Unix(int64(v), 0), nil
+		return time.Unix(
+			int64(v),
+			int64((v - float64(int(v))) * float64(time.Second / time.Nanosecond)),
+		), nil
 	case string:
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {
