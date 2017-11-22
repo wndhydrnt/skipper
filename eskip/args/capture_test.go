@@ -32,6 +32,12 @@ func TestNoArgsExpected(t *testing.T) {
 			t.Error("failed", err)
 		}
 	})
+
+	t.Run("pass, empty slice", func(t *testing.T) {
+		if err := Capture(nil, []interface{}{}); err != nil {
+			t.Error("failed", err)
+		}
+	})
 }
 
 func TestFixedArgs(t *testing.T) {
@@ -692,8 +698,8 @@ func TestDuration(t *testing.T) {
 			return
 		}
 
-		if d < time.Duration(3.139 * float64(time.Second)) ||
-			d > time.Duration(3.141 * float64(time.Second)) {
+		if d < time.Duration(3.139*float64(time.Second)) ||
+			d > time.Duration(3.141*float64(time.Second)) {
 			t.Error("failed to parse duration with unit")
 		}
 	})
@@ -763,8 +769,8 @@ func TestTime(t *testing.T) {
 			return
 		}
 
-		expectedLess := time.Unix(1511277065, 39 * int64(time.Second / time.Nanosecond) / 100)
-		expectedMore := time.Unix(1511277065, 43 * int64(time.Second / time.Nanosecond) / 100)
+		expectedLess := time.Unix(1511277065, 39*int64(time.Second/time.Nanosecond)/100)
+		expectedMore := time.Unix(1511277065, 43*int64(time.Second/time.Nanosecond)/100)
 		if tim.Before(expectedLess) || tim.After(expectedMore) {
 			t.Error("failed to parse time")
 			t.Log("got:     ", tim)
@@ -815,6 +821,54 @@ func TestTime(t *testing.T) {
 		var times []time.Time
 		if err := Capture(&times, []interface{}{"foo"}); err != ErrInvalidArgs {
 			t.Error("failed to fail", err, ErrInvalidArgs)
+		}
+	})
+}
+
+func TestDefault(t *testing.T) {
+	i := 42
+	if err := Capture(Optional(&i), nil); err != nil {
+		t.Error(err)
+		return
+	}
+
+	if i != 42 {
+		t.Error("didn't leave the default")
+	}
+}
+
+func TestVarargAfterOptional(t *testing.T) {
+	t.Run("wrong type for optional", func(t *testing.T) {
+		var (
+			opt     int
+			varargs []string
+		)
+
+		if err := Capture(
+			Optional(&opt),
+			&varargs,
+			[]interface{}{"foo", "bar"},
+		); err != ErrInvalidArgs {
+			t.Error("failed to fail", err, ErrInvalidArgs)
+		}
+	})
+
+	t.Run("ok", func(t *testing.T) {
+		var (
+			opt     int
+			varargs []string
+		)
+
+		if err := Capture(
+			Optional(&opt),
+			&varargs,
+			[]interface{}{42, "foo", "bar"},
+		); err != nil {
+			t.Error(err)
+		}
+
+		if opt != 42 || !reflect.DeepEqual(varargs, []string{"foo", "bar"}) {
+			t.Error("failed to capture varargs after optional")
 		}
 	})
 }

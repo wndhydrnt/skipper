@@ -1,3 +1,6 @@
+/*
+Package args provides convenience functions to capture filter and predicate arguments.
+*/
 package args
 
 import (
@@ -33,6 +36,9 @@ const (
 )
 
 var (
+	// ErrInvalidArgs is returned when it was not possible to capture
+	// the input arguments with the given set of capture definitions,
+	// assuming that the set of capture definitions is valid.
 	ErrInvalidArgs = errors.New("invalid args")
 
 	errArgPositionType          = errors.New("last argument must be of type []interface{} or nil")
@@ -42,6 +48,146 @@ var (
 	errExpetingOptionalOrVararg = errors.New("expecting optional or vararg")
 	errInvalidDurationCapture   = errors.New("invalid duration definition capture")
 )
+
+// Capture takes some capture definitions and a slice of arguments,
+// and tries to match the arguments to the definitions in order and
+// by type.
+//
+// The last argument to Capture must always be the slice of the input
+// arguments. E.g. validating for zero arguments:
+//
+// 	Capture(arguments)
+//
+// The capture definitions are pointers to variables, or pointers to
+// variables modified by one or more of the Duration, Enum or Optional
+// operators. The following base types are supported: int, float64,
+// string, time.Duration, time.Time.
+//
+// E.g expecting a single number:
+//
+// 	var num int
+//	Capture(&num, arguments)
+//
+// or one of red, green or blue:
+//
+// 	var color string
+// 	Capture(Enum(&color, "red", "green", "blue"), arguments)
+//
+// The last N capture definitions can be optional or variadic. E.g:
+//
+// 	var name string
+// 	var age int
+// 	Capture(&name, Optional(&age), arguments)
+//
+// Variadic capture definitions are created by using a slice. They can
+// be used only as the last capture definition. E.g:
+//
+// 	var name string
+// 	var values []int
+// 	Capture(&name, &values, arguments)
+//
+// When capturing int or float64, conversion from one to the other
+// happens automatically, based on the type of the capture definition.
+//
+// When capturing duration, duration strings are accepted, e.g. 12s,
+// or numbers, int or float64, and the they're converted to duration
+// as milliseconds. With the Duration operator, it is possible to
+// define custom units.
+//
+// When capturing time values, and the argument type is number, int
+// or float64, it is used as a unix timestamp. When the argument is
+// a string, it is parsed as an RFC3339 time string.
+func Capture(a ...interface{}) error {
+	captures, args, err := splitArgs(a)
+	if err != nil {
+		return err
+	}
+
+	if len(captures) == 0 {
+		if len(args) == 0 {
+			return nil
+		}
+
+		return ErrInvalidArgs
+	}
+
+	var (
+		index   int
+		capture interface{}
+		f       captureFlags
+	)
+
+	f = hasArgs
+	for index, capture = range captures {
+		if len(args) == index {
+			f = f &^ hasArgs
+		}
+
+		if index == len(captures)-1 {
+			f |= lastPosition
+		}
+
+		if err := validateCapture(capture, f); err != nil {
+			return err
+		}
+
+		if f&hasArgs != 0 {
+			if f, err = captureArg(capture, args[index:], f); err != nil {
+				return err
+			}
+		}
+	}
+
+	if f&varargsConsumed == 0 && index+1 < len(args) {
+		return ErrInvalidArgs
+	}
+
+	return nil
+}
+
+// Enum takes a string capture definition and some options,
+// and returns a capture definition that has its possible
+// values limited to the provided options.
+func Enum(a interface{}, options ...string) interface{} {
+	switch p := a.(type) {
+	case *string, *[]string:
+		return enum{
+			options: options,
+			p:       p,
+		}
+	case optional:
+		return Optional(Enum(p.p, options...))
+	default:
+		return enum{invalid: true}
+	}
+}
+
+// Duration takes a pointer to a time.Duration variable and a
+// unit, and returns a capture definition that will use the
+// provided unit when the input arg is an int or a float64. The
+// unit will be ignored when the input arg is a duration string.
+// The default unit is time.Millisecond, in which case it is
+// enough to just provide a pointer to a time.Duration variable
+// and there's no need to use this operator.
+func Duration(a interface{}, unit time.Duration) interface{} {
+	switch p := a.(type) {
+	case *time.Duration, *[]time.Duration:
+		return duration{
+			unit: unit,
+			p:    p,
+		}
+	case optional:
+		return Optional(Duration(p.p, unit))
+	default:
+		return duration{invalid: true}
+	}
+}
+
+// Optional takes a capture definition and returns an optional one
+// for the same capture definition.
+func Optional(a interface{}) interface{} {
+	return optional{a}
+}
 
 func splitArgs(a []interface{}) (captures []interface{}, args []interface{}, err error) {
 	if len(a) == 0 {
@@ -244,7 +390,7 @@ func captureTime(a interface{}) (time.Time, error) {
 	case float64:
 		return time.Unix(
 			int64(v),
-			int64((v - float64(int(v))) * float64(time.Second / time.Nanosecond)),
+			int64((v-float64(int(v)))*float64(time.Second/time.Nanosecond)),
 		), nil
 	case string:
 		t, err := time.Parse(time.RFC3339, v)
@@ -344,84 +490,4 @@ func captureArg(capture interface{}, a []interface{}, f captureFlags) (nextFlags
 	}
 
 	return
-}
-
-func Capture(a ...interface{}) error {
-	captures, args, err := splitArgs(a)
-	if err != nil {
-		return err
-	}
-
-	if len(captures) == 0 {
-		if len(args) == 0 {
-			return nil
-		}
-
-		return ErrInvalidArgs
-	}
-
-	var (
-		index   int
-		capture interface{}
-		f       captureFlags
-	)
-
-	f = hasArgs
-	for index, capture = range captures {
-		if len(args) == index {
-			f = f &^ hasArgs
-		}
-
-		if index == len(captures)-1 {
-			f |= lastPosition
-		}
-
-		if err := validateCapture(capture, f); err != nil {
-			return err
-		}
-
-		if f&hasArgs != 0 {
-			if f, err = captureArg(capture, args[index:], f); err != nil {
-				return err
-			}
-		}
-	}
-
-	if f&varargsConsumed == 0 && index+1 < len(args) {
-		return ErrInvalidArgs
-	}
-
-	return nil
-}
-
-func Enum(a interface{}, options ...string) interface{} {
-	switch p := a.(type) {
-	case *string, *[]string:
-		return enum{
-			options: options,
-			p:       p,
-		}
-	case optional:
-		return Optional(Enum(p.p, options...))
-	default:
-		return enum{invalid: true}
-	}
-}
-
-func Duration(a interface{}, unit time.Duration) interface{} {
-	switch p := a.(type) {
-	case *time.Duration, *[]time.Duration:
-		return duration{
-			unit: unit,
-			p:    p,
-		}
-	case optional:
-		return Optional(Duration(p.p, unit))
-	default:
-		return duration{invalid: true}
-	}
-}
-
-func Optional(a interface{}) interface{} {
-	return optional{a}
 }

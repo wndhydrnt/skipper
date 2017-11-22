@@ -240,9 +240,11 @@ Example, randompredicate.go:
     package main
 
     import (
-        "github.com/zalando/skipper/routing"
         "math/rand"
         "net/http"
+
+        "github.com/zalando/skipper/eskip/args"
+        "github.com/zalando/skipper/routing"
     )
 
     type randomSpec struct {}
@@ -253,15 +255,13 @@ Example, randompredicate.go:
 
     func (s *randomSpec) Name() string { return "Random" }
 
-    func (s *randomSpec) Create(args []interface{}) routing.Predicate {
-        p := &randomPredicate{.5}
-        if len(args) > 0 {
-            if c, ok := args[0].(float64); ok {
-                p.chance = c
-            }
+    func (s *randomSpec) Create(a []interface{}) (routing.Predicate, error) {
+        chance := .5
+        if err := args.Capture(args.Optional(&chance), a); err != nil {
+            return nil, err
         }
 
-        return p
+        return &randomPredicate{chance}
     }
 
     func (p *randomPredicate) Match(_ *http.Request) bool {
@@ -288,6 +288,8 @@ Example, hellofilter.go:
 
     import (
         "fmt"
+
+        "github.com/zalando/skipper/eskip/args"
         "github.com/zalando/skipper/filters"
     )
 
@@ -300,15 +302,12 @@ Example, hellofilter.go:
     func (s *helloSpec) Name() string { return "hello" }
 
     func (s *helloSpec) CreateFilter(config []interface{}) (filters.Filter, error) {
-        if len(config) == 0 {
-            return nil, filters.ErrInvalidFilterParameters
+        var who string
+        if err := args.Capture(&who, config); err != nil {
+            return err
         }
 
-        if who, ok := config[0].(string); ok {
-            return &helloFilter{who}, nil
-        } else {
-            return nil, filters.ErrInvalidFilterParameters
-        }
+        return &helloFilter{who}, nil
     }
 
     func (f *helloFilter) Request(ctx filters.FilterContext) {}
