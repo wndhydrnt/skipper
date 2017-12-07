@@ -2,6 +2,7 @@ package skipper
 
 import (
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -436,15 +437,33 @@ func (o *Options) isHTTPS() bool {
 	return o.CertPathTLS != "" && o.KeyPathTLS != ""
 }
 
+// TODO(sszuecs): make timeout options available and set defaults as Go has
 func listenAndServe(proxy http.Handler, o *Options) error {
 	// create the access log handler
 	loggingHandler := logging.NewHandler(proxy)
 	log.Infof("proxy listener on %v", o.Address)
-	if o.isHTTPS() {
-		return http.ListenAndServeTLS(o.Address, o.CertPathTLS, o.KeyPathTLS, loggingHandler)
+
+	srv := &http.Server{
+		Addr:              o.Address,
+		Handler:           loggingHandler,
+		ReadTimeout:       5 * time.Second,
+		ReadHeaderTimeout: 2 * time.Second, // *new*: amount of time to read http.Headers, resets DeadLine -> handler should decide how long read Body is allowed to take (protect against slowloris)
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       3 * time.Second, // *new*: max time to wait to close a connection if keepalive is used
+		MaxHeaderBytes:    4096,            // if 0, DefaultMaxHeaderBytes is used
+		// TLSNextProto: // if used HTTP/2 is not enabled by default
+		ConnState: func(conn net.Conn, state http.ConnState) { // *new*: callback to react on client connection state changes
+			log.Printf("con: %v -> state: %v", conn, state)
+
+		},
 	}
+
+	if o.isHTTPS() {
+		return srv.ListenAndServeTLS(o.CertPathTLS, o.KeyPathTLS)
+	}
+
 	log.Infof("certPathTLS or keyPathTLS not found, defaulting to HTTP")
-	return http.ListenAndServe(o.Address, loggingHandler)
+	return srv.ListenAndServe()
 }
 
 // Run skipper.
