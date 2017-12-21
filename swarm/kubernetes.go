@@ -20,7 +20,9 @@ type KubernetesOptions struct {
 	ApplicationName string
 	Client          KubernetesClient
 	FetchTimeout    time.Duration
-	hackPort        int
+
+	hackNodes func(n []*NodeInfo) []*NodeInfo
+	hackSelf  func(n []*NodeInfo) *NodeInfo
 }
 
 type knodeResponse struct {
@@ -58,8 +60,8 @@ func KubernetesEntry(o KubernetesOptions) *KubernetesEntryPoint {
 	o = fillDefaults(o)
 	kep := &KubernetesEntryPoint{
 		KubernetesOptions: o,
-		fetch: make(chan *knodeResponse),
-		nodes: make(chan *knodeRequest),
+		fetch:             make(chan *knodeResponse),
+		nodes:             make(chan *knodeRequest),
 	}
 	go kep.control()
 	return kep
@@ -68,29 +70,37 @@ func KubernetesEntry(o KubernetesOptions) *KubernetesEntryPoint {
 func (kep *KubernetesEntryPoint) fetchNodes(to time.Duration) {
 	<-time.After(to)
 	nodes, err := kep.Client.GetNodeInfo(kep.Namespace, kep.ApplicationName)
+	if err != nil {
+		kep.fetch <- &knodeResponse{err: err}
+		return
+	}
+
+	if kep.hackNodes != nil {
+		nodes = kep.hackNodes(nodes)
+	}
+
 	kep.fetch <- &knodeResponse{nodes: nodes, err: err}
 }
 
-func findSelf(n []*NodeInfo) (*NodeInfo, error) {
+func (kep *KubernetesEntryPoint) findSelf(n []*NodeInfo) (*NodeInfo, error) {
+	if kep.hackSelf != nil {
+		return kep.hackSelf(n), nil
+	}
+
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return nil, err
 	}
 
 	for i := range addrs {
-		println("own address", addrs[i].String(), addrs[i].Network())
 		ip, _, err := net.ParseCIDR(addrs[i].String())
-		println("own ip", ip.String())
 		if err != nil {
 			return nil, err
 		}
 
-		if addrs[i].Network() == "tcp" {
-			for j := range n {
-				println("checking equal for", n[j].Addr.String(), ip.String())
-				if ip.Equal(n[j].Addr) {
-					return n[j], nil
-				}
+		for j := range n {
+			if ip.Equal(n[j].Addr) {
+				return n[j], nil
 			}
 		}
 	}
@@ -111,7 +121,6 @@ func (kep *KubernetesEntryPoint) control() {
 	for {
 		select {
 		case frsp := <-kep.fetch:
-			println("fetched")
 			// nodeReqs nil, therefore blocked until first fetch done
 			nodeReqs = kep.nodes
 
@@ -119,23 +128,18 @@ func (kep *KubernetesEntryPoint) control() {
 			go kep.fetchNodes(kep.FetchTimeout)
 
 			if frsp.err == nil {
-				println("no error")
-				self, err := findSelf(frsp.nodes)
+				self, err := kep.findSelf(frsp.nodes)
 				if err != nil {
-					println("error in finding self")
 					lastError = err
 				} else {
-					println("no error", self == nil)
 					lastSelf = self
 					lastNodes = frsp.nodes
-					println("setting it to nil")
 					lastError = nil
 				}
 			} else {
 				lastError = frsp.err
 			}
 		case req := <-nodeReqs:
-			println("sending lastError", lastError != nil)
 			req.ret <- &knodeResponse{
 				self:  lastSelf,
 				nodes: lastNodes,
@@ -154,11 +158,6 @@ func (kep *KubernetesEntryPoint) req() *knodeResponse {
 
 func (kep *KubernetesEntryPoint) Node() (*NodeInfo, error) {
 	rsp := kep.req()
-	if kep.hackPort != 0 {
-		rsp.self.Port = kep.hackPort
-	}
-
-	println("has error", rsp.err != nil)
 	return rsp.self, rsp.err
 }
 
