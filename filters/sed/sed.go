@@ -9,6 +9,13 @@ import (
 	"github.com/zalando/skipper/filters"
 )
 
+type bodyType int
+
+const (
+	sedRequest bodyType = iota
+	sedResponse
+)
+
 type sed struct {
 	regex   *regexp.Regexp
 	replace string
