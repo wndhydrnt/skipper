@@ -9,11 +9,11 @@ import (
 	"github.com/zalando/skipper/filters"
 )
 
-type bodyType int
+type sedType int
 
 const (
-	sedRequest bodyType = iota
-	sedResponse
+	request sedType = iota
+	response
 )
 
 type sed struct {
