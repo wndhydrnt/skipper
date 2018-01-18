@@ -26,11 +26,19 @@ import (
 type sedType int
 
 const (
-	request sedType = iota
-	response
+	sedRequest sedType = iota
+	sedResponse
+
+	SedRequestName  = "sedRequest"
+	SedResponseName = "sedResponse"
 )
 
+/*
+Holds the regular expression pattern and replacement string to be applied for
+a given filter type.
+*/
 type sed struct {
+	typ     sedType
 	regex   *regexp.Regexp
 	replace string
 }
@@ -48,7 +56,14 @@ func NewSed() filters.Spec { return &sed{} }
 
 // Returns the name of this filter.
 func (spec *sed) Name() string {
-	return SedName
+	switch spec.typ {
+	case sedRequest:
+		return SedRequestName
+	case sedResponse:
+		return SedResponseName
+	default:
+		panic("invalid header type")
+	}
 }
 
 // Creates a new sed filter with the parameters specified in config.
@@ -75,13 +90,37 @@ func (spec *sed) CreateFilter(config []interface{}) (filters.Filter, error) {
 	return &sed{regex: regex, replace: replace}, nil
 }
 
-// Intentionally left with no implementation.
-func (_ *sed) Request(_ filters.FilterContext) {}
+/*
+If the filter is defined as 'sedRequest', matches the request body against this
+filter's regex. If successful, the portion which was matched is replaced with
+the provided replacement string.
+*/
+func (f *sed) Request(ctx filters.FilterContext) {
+	if f.typ == sedRequest {
+		applyRegexSub(ctx.Request().Body, f)
+	}
+}
 
-// Applies this filter's regex to the response body and replaces what was
-// matched with the provided replacement string.
+/*
+If the filter is defined as 'sedResponse', matches the response body against
+this filter's regex. If successful, the portion which was matched is replaced
+with the provided replacement string.
+*/
 func (f *sed) Response(ctx filters.FilterContext) {
+	if f.typ == sedResponse {
+		transformed, err = f.applyRegexSub(ctx.Response().Body)
+		if err != nil {
+			log.Println(err)
+			return
+		}
 
+	}
+}
+
+// Applies the regex
+func (f *sed) applyRegexSub(ctx filters.FilterContext) {
+	var body []byte
+	var err error
 	body, err := ioutil.ReadAll(ctx.Response().Body)
 	if err != nil {
 		log.Println(err)
