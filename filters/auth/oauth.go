@@ -2,10 +2,12 @@ package auth
 
 import (
 	"net/http"
+
+	"github.com/zalando/skipper/filters"
 )
 
 const (
-	Name = "oauth"
+	OAuthName = "oauth"
 )
 
 type (
@@ -20,8 +22,8 @@ type (
 	}
 
 	oauthClient struct {
-		client       *http.Client
-		tokeninfoURL string
+		client    *http.Client
+		tokeninfo string
 	}
 
 	oauthFilter struct {
@@ -35,7 +37,16 @@ const (
 	authHeader = "Authorization"
 )
 
+func NewOAuth(tokeninfo string) filters.Spec {
+	oauthClient := &oauthClient{
+		client:    &http.Client{},
+		tokeninfo: tokeninfo,
+	}
+
+	return &oauthSpec{client: oauthClient}
+}
+
 // Returns the name of this filter
-func (spec *authSpec) Name() string {
-	return Name
+func (spec *oauthSpec) Name() string {
+	return OAuthName
 }

@@ -1,5 +1,9 @@
 package auth
 
+import (
+	"testing"
+)
+
 var ()
 
 func TestNewOAuth(t *testing.T) {
