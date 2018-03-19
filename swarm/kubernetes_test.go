@@ -11,6 +11,8 @@ import (
 )
 
 func TestKubernetesSwarm(t *testing.T) {
+	t.Skip()
+
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(content))
 	}))

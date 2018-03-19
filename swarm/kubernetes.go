@@ -101,8 +101,9 @@ func (kep *KubernetesEntryPoint) findSelf(n []*NodeInfo) (*NodeInfo, error) {
 		for j := range n {
 			if ip.Equal(n[j].Addr) {
 				return n[j], nil
+				}
 			}
-		}
+
 	}
 
 	return nil, errSelfAddressNotFound
@@ -121,6 +122,7 @@ func (kep *KubernetesEntryPoint) control() {
 	for {
 		select {
 		case frsp := <-kep.fetch:
+
 			// nodeReqs nil, therefore blocked until first fetch done
 			nodeReqs = kep.nodes
 
@@ -158,10 +160,15 @@ func (kep *KubernetesEntryPoint) req() *knodeResponse {
 
 func (kep *KubernetesEntryPoint) Node() (*NodeInfo, error) {
 	rsp := kep.req()
+	println("has error", rsp.err != nil, rsp.self.Port)
 	return rsp.self, rsp.err
 }
 
 func (kep *KubernetesEntryPoint) Nodes() ([]*NodeInfo, error) {
 	rsp := kep.req()
-	return rsp.nodes, rsp.err
+	nodes := make([]*NodeInfo, 0)
+	for i, node := range rsp.nodes {
+		node.Port = 33333+i
+	}
+	return nodes, rsp.err
 }

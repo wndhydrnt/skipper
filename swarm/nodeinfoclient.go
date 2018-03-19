@@ -57,7 +57,7 @@ type itemList struct {
 func (c *NodeInfoClient) GetNodeInfo(namespace string, applicationName string) ([]*NodeInfo, error) {
 	rsp, err := c.client.Get(fmt.Sprintf(
 		// TODO: use safer url building
-		"%s/api/v1/namespaces/%s/pods?labelSelector=application%3D%s",
+		"%s/api/v1/namespaces/%s/pods?labelSelector=application%%3D%s",
 		c.kubeAPIBaseURL,
 		namespace,
 		applicationName,

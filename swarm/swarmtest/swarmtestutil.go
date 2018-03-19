@@ -54,14 +54,14 @@ func (node *TestNode) Join(nodesToJoin []string) error {
 		return err
 	}
 	if len(nodesToJoin) != n {
-		log.Println("failed to join %d nodes from the given list", len(nodesToJoin)-n)
+		log.Printf("failed to join %d nodes from the given list\n", len(nodesToJoin)-n)
 	}
 	return nil
 }
 
 func (node *TestNode) ListMembers() error {
 	if node.state != alive {
-		return errors.New(fmt.Sprintf("cannot list members of a node with %s state", node.state))
+		return errors.New(fmt.Sprintf("cannot list members of a node with %v state", node.state))
 	}
 
 	for _, mem := range node.list.Members() {
@@ -72,7 +72,7 @@ func (node *TestNode) ListMembers() error {
 
 func (node *TestNode) Exit() error {
 	if node.state != alive {
-		return errors.New(fmt.Sprintf("cannot exit a node from %s state", node.state))
+		return errors.New(fmt.Sprintf("cannot exit a node from %v state", node.state))
 	}
 	node.transport.Exit()
 	return nil
