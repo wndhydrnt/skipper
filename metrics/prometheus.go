@@ -46,6 +46,7 @@ type Prometheus struct {
 
 	opts     Options
 	registry *prometheus.Registry
+	handler  http.Handler
 }
 
 // NewPrometheus returns a new Prometheus metric backend.
@@ -209,7 +210,7 @@ func NewPrometheus(opts Options) *Prometheus {
 
 // sinceS returns the seconds passed since the start time until now.
 func (p *Prometheus) sinceS(start time.Time) float64 {
-	return time.Now().Sub(start).Seconds()
+	return time.Since(start).Seconds()
 }
 
 func (p *Prometheus) registerMetrics() {
@@ -239,10 +240,23 @@ func (p *Prometheus) registerMetrics() {
 	}
 }
 
+func (p *Prometheus) CreateHandler() http.Handler {
+	return promhttp.HandlerFor(p.registry, promhttp.HandlerOpts{})
+}
+
+func (p *Prometheus) getHandler() http.Handler {
+	if p.handler != nil {
+		return p.handler
+	}
+
+	p.handler = p.CreateHandler()
+	return p.handler
+}
+
 // RegisterHandler satisfies Metrics interface.
 func (p *Prometheus) RegisterHandler(path string, mux *http.ServeMux) {
-	memHandler := promhttp.HandlerFor(p.registry, promhttp.HandlerOpts{})
-	mux.Handle(path, memHandler)
+	promHandler := p.getHandler()
+	mux.Handle(path, promHandler)
 }
 
 // MeasureSince satisfies Metrics interface.

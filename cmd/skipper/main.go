@@ -34,13 +34,22 @@ const (
 	defaultSourcePollTimeout = int64(3000)
 	defaultSupportListener   = ":9911"
 	// deprecated
-	defaultMetricsListener      = ":9911"
-	defaultMetricsPrefix        = "skipper."
-	defaultRuntimeMetrics       = true
-	defaultApplicationLogPrefix = "[APP]"
-	defaultApplicationLogLevel  = "INFO"
-	defaultBackendFlushInterval = 20 * time.Millisecond
-	defaultExperimentalUpgrade  = false
+	defaultMetricsListener                 = ":9911"
+	defaultMetricsPrefix                   = "skipper."
+	defaultRuntimeMetrics                  = true
+	defaultApplicationLogPrefix            = "[APP]"
+	defaultApplicationLogLevel             = "INFO"
+	defaultBackendFlushInterval            = 20 * time.Millisecond
+	defaultExperimentalUpgrade             = false
+	defaultReadTimeoutServer               = 5 * time.Minute
+	defaultReadHeaderTimeoutServer         = 60 * time.Second
+	defaultWriteTimeoutServer              = 60 * time.Second
+	defaultIdleTimeoutServer               = 60 * time.Second
+	defaultTimeoutBackend                  = 60 * time.Second
+	defaultKeepaliveBackend                = 30 * time.Second
+	defaultTLSHandshakeTimeoutBackend      = 60 * time.Second
+	defaultMaxIdleConnsBackend             = 0
+	defaultLoadBalancerHealthCheckInterval = 0 // disabled
 
 	addressUsage                   = "network address that skipper should listen on"
 	etcdUrlsUsage                  = "urls of nodes in an etcd cluster, storing route definitions"
@@ -100,78 +109,105 @@ const (
 	defaultHTTPStatusUsage         = "default HTTP status used when no route is found for a request"
 	pluginDirUsage                 = "set the directory to load plugins from, default is ./"
 	suppressRouteUpdateLogsUsage   = "print only summaries on route updates/deletes"
-	enablePrometheusMetricsUsage   = "use Prometheus metrics format to expose metrics"
+	enablePrometheusMetricsUsage   = "siwtch to Prometheus metrics format to expose metrics. *Deprecated*: use metrics-flavour"
+
+	loadBalancerHealthCheckIntervalUsage = "use to set the health checker interval to check healthiness of former dead or unhealthy routes"
+	reverseSourcePredicateUsage          = "reverse the order of finding the client IP from X-Forwarded-For header"
+	readTimeoutServerUsage               = "set ReadTimeout for http server connections"
+	readHeaderTimeoutServerUsage         = "set ReadHeaderTimeout for http server connections"
+	writeTimeoutServerUsage              = "set WriteTimeout for http server connections"
+	idleTimeoutServerUsage               = "set IdleTimeout for http server connections"
+	maxHeaderBytesUsage                  = "set MaxHeaderBytes for http server connections"
+	enableConnMetricsServerUsage         = "enables connection metrics for http server connections"
+	timeoutBackendUsage                  = "sets the TCP client connection timeout for backend connections"
+	keepaliveBackendUsage                = "sets the keepalive for backend connections"
+	enableDualstackBackendUsage          = "enables DualStack for backend connections"
+	tlsHandshakeTimeoutBackendUsage      = "sets the TLS handshake timeout for backend connections"
+	maxIdleConnsBackendUsage             = "sets the maximum idle connections for all backend connections"
+	enableHopHeadersRemovalUsage         = "enables removal of Hop-Headers according to RFC-2616"
 )
 
 var (
-	version string
-	commit  string
-)
-
-var (
-	address                   string
-	etcdUrls                  string
-	etcdPrefix                string
-	insecure                  bool
-	proxyPreserveHost         bool
-	idleConnsPerHost          int
-	closeIdleConnsPeriod      string
-	kubernetes                bool
-	kubernetesInCluster       bool
-	kubernetesURL             string
-	kubernetesHealthcheck     bool
-	kubernetesHTTPSRedirect   bool
-	kubernetesIngressClass    string
-	innkeeperURL              string
-	sourcePollTimeout         int64
-	routesFile                string
-	inlineRoutes              string
-	oauthURL                  string
-	oauthScope                string
-	oauthCredentialsDir       string
-	innkeeperAuthToken        string
-	innkeeperPreRouteFilters  string
-	innkeeperPostRouteFilters string
-	devMode                   bool
-	supportListener           string
-	metricsListener           string
-	metricsPrefix             string
-	enableProfile             bool
-	debugGcMetrics            bool
-	runtimeMetrics            bool
-	serveRouteMetrics         bool
-	serveHostMetrics          bool
-	backendHostMetrics        bool
-	allFiltersMetrics         bool
-	combinedResponseMetrics   bool
-	routeResponseMetrics      bool
-	routeBackendErrorCounters bool
-	routeStreamErrorCounters  bool
-	routeBackendMetrics       bool
-	metricsUseExpDecaySample  bool
-	disableMetricsCompat      bool
-	applicationLog            string
-	applicationLogLevel       string
-	applicationLogPrefix      string
-	accessLog                 string
-	accessLogDisabled         bool
-	accessLogJSONEnabled      bool
-	debugListener             string
-	certPathTLS               string
-	keyPathTLS                string
-	backendFlushInterval      time.Duration
-	experimentalUpgrade       bool
-	printVersion              bool
-	maxLoopbacks              int
-	enableBreakers            bool
-	breakers                  breakerFlags
-	enableRatelimiters        bool
-	ratelimits                ratelimitFlags
-	openTracing               string
-	defaultHTTPStatus         int
-	pluginDir                 string
-	suppressRouteUpdateLogs   bool
-	enablePrometheusMetrics   bool
+	version                         string
+	commit                          string
+	address                         string
+	etcdUrls                        string
+	etcdPrefix                      string
+	insecure                        bool
+	proxyPreserveHost               bool
+	removeHopHeaders                bool
+	idleConnsPerHost                int
+	closeIdleConnsPeriod            string
+	kubernetes                      bool
+	kubernetesInCluster             bool
+	kubernetesURL                   string
+	kubernetesHealthcheck           bool
+	kubernetesHTTPSRedirect         bool
+	kubernetesIngressClass          string
+	innkeeperURL                    string
+	sourcePollTimeout               int64
+	routesFile                      string
+	inlineRoutes                    string
+	oauthURL                        string
+	oauthScope                      string
+	oauthCredentialsDir             string
+	innkeeperAuthToken              string
+	innkeeperPreRouteFilters        string
+	innkeeperPostRouteFilters       string
+	devMode                         bool
+	supportListener                 string
+	metricsListener                 string
+	metricsPrefix                   string
+	enableProfile                   bool
+	debugGcMetrics                  bool
+	runtimeMetrics                  bool
+	serveRouteMetrics               bool
+	serveHostMetrics                bool
+	backendHostMetrics              bool
+	allFiltersMetrics               bool
+	combinedResponseMetrics         bool
+	routeResponseMetrics            bool
+	routeBackendErrorCounters       bool
+	routeStreamErrorCounters        bool
+	routeBackendMetrics             bool
+	metricsUseExpDecaySample        bool
+	disableMetricsCompat            bool
+	applicationLog                  string
+	applicationLogLevel             string
+	applicationLogPrefix            string
+	accessLog                       string
+	accessLogDisabled               bool
+	accessLogJSONEnabled            bool
+	debugListener                   string
+	certPathTLS                     string
+	keyPathTLS                      string
+	backendFlushInterval            time.Duration
+	experimentalUpgrade             bool
+	printVersion                    bool
+	maxLoopbacks                    int
+	enableBreakers                  bool
+	breakers                        breakerFlags
+	enableRatelimiters              bool
+	ratelimits                      ratelimitFlags
+	openTracing                     string
+	defaultHTTPStatus               int
+	pluginDir                       string
+	suppressRouteUpdateLogs         bool
+	enablePrometheusMetrics         bool
+	metricsFlavour                  metricsFlags
+	loadBalancerHealthCheckInterval time.Duration
+	reverseSourcePredicate          bool
+	readTimeoutServer               time.Duration
+	readHeaderTimeoutServer         time.Duration
+	writeTimeoutServer              time.Duration
+	idleTimeoutServer               time.Duration
+	maxHeaderBytes                  int
+	enableConnMetricsServer         bool
+	timeoutBackend                  time.Duration
+	keepaliveBackend                time.Duration
+	enableDualstackBackend          bool
+	tlsHandshakeTimeoutBackend      time.Duration
+	maxIdleConnsBackend             int
 )
 
 func init() {
@@ -179,6 +215,7 @@ func init() {
 	flag.StringVar(&etcdUrls, "etcd-urls", "", etcdUrlsUsage)
 	flag.BoolVar(&insecure, "insecure", false, insecureUsage)
 	flag.BoolVar(&proxyPreserveHost, "proxy-preserve-host", false, proxyPreserveHostUsage)
+	flag.BoolVar(&removeHopHeaders, "remove-hop-headers", false, enableHopHeadersRemovalUsage)
 	flag.IntVar(&idleConnsPerHost, "idle-conns-num", proxy.DefaultIdleConnsPerHost, idleConnsPerHostUsage)
 	flag.StringVar(&closeIdleConnsPeriod, "close-idle-conns-period", strconv.Itoa(int(proxy.DefaultCloseIdleConnsPeriod/time.Second)), closeIdleConnsPeriodUsage)
 	flag.StringVar(&etcdPrefix, "etcd-prefix", defaultEtcdPrefix, etcdPrefixUsage)
@@ -238,6 +275,21 @@ func init() {
 	flag.IntVar(&defaultHTTPStatus, "default-http-status", http.StatusNotFound, defaultHTTPStatusUsage)
 	flag.BoolVar(&suppressRouteUpdateLogs, "suppress-route-update-logs", false, suppressRouteUpdateLogsUsage)
 	flag.BoolVar(&enablePrometheusMetrics, "enable-prometheus-metrics", false, enablePrometheusMetricsUsage)
+	flag.Var(&metricsFlavour, "metrics-flavour", metricsFlavourUsage)
+	flag.DurationVar(&loadBalancerHealthCheckInterval, "lb-healthcheck-interval", defaultLoadBalancerHealthCheckInterval, loadBalancerHealthCheckIntervalUsage)
+	flag.BoolVar(&reverseSourcePredicate, "reverse-source-predicate", false, reverseSourcePredicateUsage)
+	flag.DurationVar(&readTimeoutServer, "read-timeout-server", defaultReadTimeoutServer, readTimeoutServerUsage)
+	flag.DurationVar(&readHeaderTimeoutServer, "read-header-timeout-server", defaultReadHeaderTimeoutServer, readHeaderTimeoutServerUsage)
+	flag.DurationVar(&writeTimeoutServer, "write-timeout-server", defaultWriteTimeoutServer, writeTimeoutServerUsage)
+	flag.DurationVar(&idleTimeoutServer, "idle-timeout-server", defaultIdleTimeoutServer, idleConnsPerHostUsage)
+	flag.IntVar(&maxHeaderBytes, "max-header-bytes", http.DefaultMaxHeaderBytes, maxHeaderBytesUsage)
+	flag.BoolVar(&enableConnMetricsServer, "enable-connection-metrics", false, enableConnMetricsServerUsage)
+	flag.DurationVar(&timeoutBackend, "timeout-backend", defaultTimeoutBackend, timeoutBackendUsage)
+	flag.DurationVar(&keepaliveBackend, "keepalive-backend", defaultKeepaliveBackend, keepaliveBackendUsage)
+	flag.BoolVar(&enableDualstackBackend, "enable-dualstack-backend", true, enableDualstackBackendUsage)
+	flag.DurationVar(&tlsHandshakeTimeoutBackend, "tls-timeout-backend", defaultTLSHandshakeTimeoutBackend, tlsHandshakeTimeoutBackendUsage)
+	flag.IntVar(&maxIdleConnsBackend, "max-idle-connection-backend", defaultMaxIdleConnsBackend, maxIdleConnsBackendUsage)
+
 	flag.Parse()
 
 	// check if arguments were correctly parsed.
@@ -348,6 +400,15 @@ func main() {
 		DefaultHTTPStatus:                   defaultHTTPStatus,
 		SuppressRouteUpdateLogs:             suppressRouteUpdateLogs,
 		EnablePrometheusMetrics:             enablePrometheusMetrics,
+		MetricsFlavours:                     metricsFlavour.Get(),
+		LoadBalancerHealthCheckInterval:     loadBalancerHealthCheckInterval,
+		ReverseSourcePredicate:              reverseSourcePredicate,
+		ReadTimeoutServer:                   readTimeoutServer,
+		ReadHeaderTimeoutServer:             readHeaderTimeoutServer,
+		WriteTimeoutServer:                  writeTimeoutServer,
+		IdleTimeoutServer:                   idleTimeoutServer,
+		MaxHeaderBytes:                      maxHeaderBytes,
+		EnableConnMetricsServer:             enableConnMetricsServer,
 	}
 
 	if insecure {
@@ -356,6 +417,10 @@ func main() {
 
 	if proxyPreserveHost {
 		options.ProxyFlags |= proxy.PreserveHost
+	}
+
+	if removeHopHeaders {
+		options.ProxyFlags |= proxy.HopHeadersRemoval
 	}
 
 	log.Fatal(skipper.Run(options))

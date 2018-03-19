@@ -12,6 +12,8 @@ import (
 	"github.com/zalando/skipper/filters/flowid"
 	"github.com/zalando/skipper/filters/ratelimit"
 	"github.com/zalando/skipper/filters/tee"
+	"github.com/zalando/skipper/loadbalancer"
+	"github.com/zalando/skipper/script"
 )
 
 const (
@@ -97,6 +99,8 @@ func MakeRegistry() filters.Registry {
 		ratelimit.NewLocalRatelimit(),
 		ratelimit.NewRatelimit(),
 		ratelimit.NewDisableRatelimit(),
+		loadbalancer.NewDecide(),
+		script.NewLuaScript(),
 	} {
 		r.Register(s)
 	}

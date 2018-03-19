@@ -63,6 +63,7 @@ lint: build
 
 clean:
 	go clean -i ./...
+	rm -rf .coverprofile-all .cover
 
 deps:
 	go get -t github.com/zalando/skipper/...
@@ -80,7 +81,7 @@ vet: $(SOURCES)
 	go vet $(PACKAGES)
 
 fmt: $(SOURCES)
-	@gofmt -w $(SOURCES)
+	@gofmt -w -s $(SOURCES)
 
 check-fmt: $(SOURCES)
 	@if [ "$$(gofmt -d $(SOURCES))" != "" ]; then false; else true; fi
@@ -89,7 +90,7 @@ check-imports:
 	@glide list && true || \
 	(echo "run make deps and check if any new dependencies were vendored with glide get" && \
 	false)
-	# workaround until glide list supports --ignore $PACKAGE:
+	# workaround until glide list supports --ignore $$PACKAGE:
 	rm -rf vendor/github.com/opentracing/opentracing-go
 
 precommit: check-imports fmt build shortcheck vet
