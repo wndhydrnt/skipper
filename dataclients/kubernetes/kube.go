@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -48,6 +49,7 @@ const (
 	ratelimitAnnotationKey        = "zalando.org/ratelimit"
 	skipperfilterAnnotationKey    = "zalando.org/skipper-filter"
 	skipperpredicateAnnotationKey = "zalando.org/skipper-predicate"
+	skipperRoutesAnnotationKey    = "zalando.org/skipper-routes"
 )
 
 var internalIPs = []interface{}{
@@ -338,6 +340,13 @@ func routeID(namespace, name, host, path, backend string) string {
 	return fmt.Sprintf("kube_%s__%s__%s__%s__%s", namespace, name, host, path, backend)
 }
 
+// routeIDForCustom generates a route id for a custom route of an ingress
+// resource.
+func routeIDForCustom(namespace, name, id, host string, index int) string {
+	name = name + "_" + id + "_" + strconv.Itoa(index)
+	return routeID(namespace, name, host, "", "")
+}
+
 // converts the default backend if any
 func (c *Client) convertDefaultBackend(i *ingressItem) ([]*eskip.Route, bool, error) {
 	// the usage of the default backend depends on what we want
@@ -371,6 +380,7 @@ func (c *Client) convertDefaultBackend(i *ingressItem) ([]*eskip.Route, bool, er
 		err = nil
 		log.Errorf("Failed to find target port %v, %s, fallback to service", svc.Spec.Ports, svcPort)
 	} else {
+		// TODO(aryszka): check docs that service name is always good for requesting the endpoints
 		log.Infof("Found target port %v, for service %s", targetPort, svcName)
 		eps, err = c.getEndpoints(
 			ns,
@@ -410,9 +420,22 @@ func (c *Client) convertDefaultBackend(i *ingressItem) ([]*eskip.Route, bool, er
 	// - better: cleanup single route load balancer groups in the routing package before applying the next
 	// routing table
 
+	if len(eps) == 0 {
+		return routes, true, nil
+	}
+
+	if len(eps) == 1 {
+		r := &eskip.Route{
+			Id:      routeID(ns, name, "", "", ""),
+			Backend: eps[0],
+		}
+		routes = append(routes, r)
+		return routes, true, nil
+	}
+
 	for idx, ep := range eps {
 		r := &eskip.Route{
-			Id:      routeID(ns, name, "", "", string(idx)),
+			Id:      routeID(ns, name, "", "", strconv.Itoa(idx)),
 			Backend: ep,
 			Predicates: []*eskip.Predicate{{
 				Name: loadbalancer.MemberPredicateName,
@@ -541,6 +564,29 @@ func (c *Client) convertPathRule(ns, name, host string, prule *pathRule, endpoin
 		log.Debugf("%d routes for %s/%s/%s already known", len(eps), ns, svcName, svcPort)
 	}
 
+	if len(eps) == 1 {
+		r := &eskip.Route{
+			Id:          routeID(ns, name, host, prule.Path, svcName),
+			PathRegexps: pathExpressions,
+			Backend:     eps[0],
+		}
+
+		// add traffic predicate if traffic weight is between 0.0 and 1.0
+		if 0.0 < prule.Backend.Traffic && prule.Backend.Traffic < 1.0 {
+			r.Predicates = append([]*eskip.Predicate{{
+				Name: traffic.PredicateName,
+				Args: []interface{}{prule.Backend.Traffic},
+			}}, r.Predicates...)
+			log.Debugf("Traffic weight %.2f for backend '%s'", prule.Backend.Traffic, svcName)
+		}
+		routes = append(routes, r)
+		return routes, nil
+	}
+
+	if len(eps) == 0 {
+		return routes, nil
+	}
+
 	group := routeID(ns, name, host, prule.Path, prule.Backend.ServiceName)
 	for idx, ep := range eps {
 		r := &eskip.Route{
@@ -606,10 +652,14 @@ func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 			continue
 		}
 
+		logger := log.WithFields(log.Fields{
+			"ingress": fmt.Sprintf("%s/%s", i.Metadata.Namespace, i.Metadata.Name),
+		})
+
 		if r, ok, err := c.convertDefaultBackend(i); ok {
 			routes = append(routes, r...)
 		} else if err != nil {
-			log.Errorf("error while converting default backend: %v", err)
+			logger.Errorf("error while converting default backend: %v", err)
 		}
 
 		// TODO: only apply the filters from the annotations if it
@@ -632,12 +682,23 @@ func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 			annotationPredicate = val
 		}
 
+		// parse routes annotation
+		var extraRoutes []*eskip.Route
+		annotationRoutes := i.Metadata.Annotations[skipperRoutesAnnotationKey]
+		if annotationRoutes != "" {
+			var err error
+			extraRoutes, err = eskip.Parse(annotationRoutes)
+			if err != nil {
+				logger.Errorf("failed to parse routes from %s, skipping: %v", skipperRoutesAnnotationKey, err)
+			}
+		}
+
 		// parse backend-weihgts annotation if it exists
 		var backendWeights map[string]float64
 		if backends, ok := i.Metadata.Annotations[backendWeightsAnnotationKey]; ok {
 			err := json.Unmarshal([]byte(backends), &backendWeights)
 			if err != nil {
-				log.Errorf("error while parsing backend-weights annotation: %v", err)
+				logger.Errorf("error while parsing backend-weights annotation: %v", err)
 			}
 		}
 
@@ -645,7 +706,7 @@ func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 		endpointsURLs := make(map[string][]string)
 		for _, rule := range i.Spec.Rules {
 			if rule.Http == nil {
-				log.Warn("invalid ingress item: rule missing http definitions")
+				logger.Warn("invalid ingress item: rule missing http definitions")
 				continue
 			}
 
@@ -653,6 +714,13 @@ func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 			// this wrapping is temporary and escaping is not the right thing to do
 			// currently handled as mandatory
 			host := []string{"^" + strings.Replace(rule.Host, ".", "[.]", -1) + "$"}
+
+			// add extra routes from optional annotation
+			for idx, route := range extraRoutes {
+				route.HostRegexps = host
+				route.Id = routeIDForCustom(i.Metadata.Namespace, i.Metadata.Name, route.Id, rule.Host, idx)
+				hostRoutes[rule.Host] = append(hostRoutes[rule.Host], route)
+			}
 
 			// update Traffic field for each backend
 			computeBackendWeights(backendWeights, rule)
@@ -676,7 +744,7 @@ func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 						if annotationFilter != "" {
 							annotationFilters, err := eskip.ParseFilters(annotationFilter)
 							if err != nil {
-								log.Errorf("Can not parse annotation filters: %v", err)
+								logger.Errorf("Can not parse annotation filters: %v", err)
 							} else {
 								sav := r.Filters[:]
 								r.Filters = append(annotationFilters, sav...)
@@ -686,7 +754,7 @@ func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 						if annotationPredicate != "" {
 							predicates, err := eskip.ParsePredicates(annotationPredicate)
 							if err != nil {
-								log.Errorf("Can not parse annotation predicate: %v", err)
+								logger.Errorf("Can not parse annotation predicate: %v", err)
 							} else {
 								r.Predicates = append(r.Predicates, predicates...)
 							}
@@ -814,15 +882,6 @@ func mapRoutes(r []*eskip.Route) map[string]*eskip.Route {
 	}
 
 	return m
-}
-
-func (c *Client) listRoutes() []*eskip.Route {
-	l := make([]*eskip.Route, 0, len(c.current))
-	for _, r := range c.current {
-		l = append(l, r)
-	}
-
-	return l
 }
 
 // filterIngressesByClass will filter only the ingresses that have the valid class, these are
