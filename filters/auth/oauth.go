@@ -50,3 +50,7 @@ func NewOAuth(tokeninfo string) filters.Spec {
 func (spec *oauthSpec) Name() string {
 	return OAuthName
 }
+
+func (s *oauthSpec) CreateFilter(conf []interface{}) (filters.Filter, error) {
+	return nil, nil
+}
