@@ -20,12 +20,12 @@ func TestNewOAuth(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 
-	oauthHandler := func(w http.ResponseWriter, r *http.Request) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != tokeninfo {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 	}
 
-	oauthServer := httptest.NewServer(http.HandlerFunc(oauthHandler))
+	oauthServer := httptest.NewServer(http.HandlerFunc(handler))
 }
