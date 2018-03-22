@@ -11,12 +11,6 @@ const (
 )
 
 type (
-	oauthInfo struct {
-		Realm string
-		Scope []string
-		Uid   string
-	}
-
 	oauthSpec struct {
 		client *oauthClient
 	}
@@ -24,6 +18,12 @@ type (
 	oauthClient struct {
 		client    *http.Client
 		tokeninfo string
+	}
+
+	oauthInfo struct {
+		Realm string
+		Scope []string
+		Uid   string
 	}
 
 	oauthFilter struct {
