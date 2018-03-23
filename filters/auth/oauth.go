@@ -8,6 +8,8 @@ import (
 
 const (
 	OAuthName = "oauth"
+
+	authHeader = "Authorization"
 )
 
 type (
@@ -31,10 +33,6 @@ type (
 		realm  string
 		scopes []string
 	}
-)
-
-const (
-	authHeader = "Authorization"
 )
 
 func NewOAuth(tokeninfo string) filters.Spec {
