@@ -100,6 +100,12 @@ type Options struct {
 	// be loaded, too.
 	KubernetesIngressClass string
 
+	// KubernetesAPIIdleConnTimeout time.Duration sets the timeout for the
+	// API client's idle connections. Set it by considering the PollTimeout
+	// of the routing package. When left 0, it is set to double the value
+	// of the routing poll timeout.
+	KubernetesAPIIdleConnTimeout time.Duration
+
 	// *DEPRECATED* API endpoint of the Innkeeper service, storing route definitions.
 	InnkeeperUrl string
 
@@ -478,14 +484,23 @@ func createDataClients(o Options, auth innkeeper.Authentication) ([]routing.Data
 	}
 
 	if o.Kubernetes {
-		kubernetesClient, err := kubernetes.New(kubernetes.Options{
+		kopts := kubernetes.Options{
 			KubernetesInCluster:    o.KubernetesInCluster,
 			KubernetesURL:          o.KubernetesURL,
 			ProvideHealthcheck:     o.KubernetesHealthcheck,
 			ProvideHTTPSRedirect:   o.KubernetesHTTPSRedirect,
 			IngressClass:           o.KubernetesIngressClass,
 			ReverseSourcePredicate: o.ReverseSourcePredicate,
-		})
+			APIIdleConnTimeout:     o.KubernetesAPIIdleConnTimeout,
+		}
+		if kopts.APIIdleConnTimeout == 0 {
+			kopts.APIIdleConnTimeout = 2 * o.SourcePollTimeout
+			if kopts.APIIdleConnTimeout == 0 {
+				kopts.APIIdleConnTimeout = 2 * defaultSourcePollTimeout
+			}
+		}
+
+		kubernetesClient, err := kubernetes.New(kopts)
 		if err != nil {
 			return nil, err
 		}

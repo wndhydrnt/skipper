@@ -109,6 +109,10 @@ type Options struct {
 
 	// Noop, WIP.
 	ForceFullUpdatePeriod time.Duration
+
+	// APIIdleConnTimeout sets the timeout for idle connections to the Kubernetes API.
+	// (Make sure to set it by considering the PollTimeout of the routing package.)
+	APIIdleConnTimeout time.Duration
 }
 
 // Client is a Skipper DataClient implementation used to create routes based on Kubernetes Ingress settings.
@@ -137,7 +141,11 @@ var (
 
 // New creates and initializes a Kubernetes DataClient.
 func New(o Options) (*Client, error) {
-	httpClient, err := buildHTTPClient(serviceAccountDir+serviceAccountRootCAKey, o.KubernetesInCluster)
+	httpClient, err := buildHTTPClient(
+		serviceAccountDir+serviceAccountRootCAKey,
+		o.KubernetesInCluster,
+		o.APIIdleConnTimeout,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +205,7 @@ func readServiceAccountToken(tokenFilePath string, inCluster bool) (string, erro
 	return string(bToken), nil
 }
 
-func buildHTTPClient(certFilePath string, inCluster bool) (*http.Client, error) {
+func buildHTTPClient(certFilePath string, inCluster bool, idleConnTimeout time.Duration) (*http.Client, error) {
 	if !inCluster {
 		return http.DefaultClient, nil
 	}
@@ -222,7 +230,7 @@ func buildHTTPClient(certFilePath string, inCluster bool) (*http.Client, error) 
 		ExpectContinueTimeout: 10 * time.Second,
 		MaxIdleConns:          5,
 		MaxIdleConnsPerHost:   5,
-		IdleConnTimeout:       3 * time.Second,
+		IdleConnTimeout:       idleConnTimeout,
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			RootCAs:    certPool,
