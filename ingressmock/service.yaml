@@ -1,0 +1,10 @@
+kind: service
+metadata:
+  namespace: test-namespace
+  name: test-service
+spec:
+  clusterIP: 10.0.0.1
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80

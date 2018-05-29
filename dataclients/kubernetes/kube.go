@@ -2,7 +2,7 @@ package kubernetes
 
 import (
 	"bytes"
-	"crypto/tls"
+	// "crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"errors"
@@ -137,7 +137,9 @@ var (
 
 // New creates and initializes a Kubernetes DataClient.
 func New(o Options) (*Client, error) {
-	httpClient, err := buildHTTPClient(serviceAccountDir+serviceAccountRootCAKey, o.KubernetesInCluster)
+	// httpClient, err := buildHTTPClient(serviceAccountDir+serviceAccountRootCAKey, o.KubernetesInCluster)
+	const testKey = "/home/aryszka/Work/go/src/github.com/zalando/skipper/fixtures/test.crt"
+	httpClient, err := buildHTTPClient(testKey, o.KubernetesInCluster)
 	if err != nil {
 		return nil, err
 	}
@@ -198,6 +200,7 @@ func readServiceAccountToken(tokenFilePath string, inCluster bool) (string, erro
 }
 
 func buildHTTPClient(certFilePath string, inCluster bool) (*http.Client, error) {
+	inCluster = true
 	if !inCluster {
 		return http.DefaultClient, nil
 	}
@@ -212,21 +215,21 @@ func buildHTTPClient(certFilePath string, inCluster bool) (*http.Client, error) 
 	}
 
 	transport := &http.Transport{
-		DialContext: (&net.Dialer{
-			Timeout:   10 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
-		ExpectContinueTimeout: 10 * time.Second,
-		MaxIdleConns:          5,
-		MaxIdleConnsPerHost:   5,
-		IdleConnTimeout:       3 * time.Second,
-		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			RootCAs:    certPool,
-		},
+		// DialContext: (&net.Dialer{
+		// 	Timeout:   10 * time.Second,
+		// 	KeepAlive: 30 * time.Second,
+		// 	DualStack: true,
+		// }).DialContext,
+		// TLSHandshakeTimeout:   10 * time.Second,
+		// ResponseHeaderTimeout: 10 * time.Second,
+		// ExpectContinueTimeout: 10 * time.Second,
+		// MaxIdleConns:          5,
+		// MaxIdleConnsPerHost:   5,
+		IdleConnTimeout: 30 * time.Millisecond,
+		// TLSClientConfig: &tls.Config{
+		// 	MinVersion: tls.VersionTLS12,
+		// 	RootCAs:    certPool,
+		// },
 	}
 
 	return &http.Client{
