@@ -198,7 +198,6 @@ func readServiceAccountToken(tokenFilePath string, inCluster bool) (string, erro
 }
 
 func buildHTTPClient(certFilePath string, inCluster bool) (*http.Client, error) {
-	inCluster = true
 	if !inCluster {
 		return http.DefaultClient, nil
 	}
@@ -223,7 +222,7 @@ func buildHTTPClient(certFilePath string, inCluster bool) (*http.Client, error) 
 		ExpectContinueTimeout: 10 * time.Second,
 		MaxIdleConns:          5,
 		MaxIdleConnsPerHost:   5,
-		IdleConnTimeout: 30 * time.Millisecond,
+		IdleConnTimeout:       3 * time.Second,
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			RootCAs:    certPool,
