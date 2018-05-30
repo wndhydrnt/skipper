@@ -1,3 +1,11 @@
+/*
+Package mockkubernetesapi provides a mock for the Kubernetes API supporting ingress related features.
+
+TODO:
+- delete option for different objects
+- accept full spec documents
+- accept multiple ingress spec documents
+*/
 package mockkubernetesapi
 
 import (

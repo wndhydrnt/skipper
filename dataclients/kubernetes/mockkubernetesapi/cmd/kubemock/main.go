@@ -1,5 +1,8 @@
 package main
 
+// TODO:
+// - monitor spec dir for changes
+
 import (
 	"bytes"
 	"encoding/json"
