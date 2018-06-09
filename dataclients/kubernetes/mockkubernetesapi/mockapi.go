@@ -9,185 +9,258 @@ TODO:
 package mockkubernetesapi
 
 import (
+	"bytes"
 	"encoding/json"
-	"errors"
+	"io"
 	"log"
 	"net/http"
 	"sync"
 
 	"github.com/zalando/skipper/pathmux"
-	"gopkg.in/yaml.v2"
+	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
-type mockapi struct {
+type MockAPI struct {
 	mux       *pathmux.Tree
 	sync      sync.RWMutex
-	ingress   []byte
-	services  map[string]map[string][]byte
-	endpoints map[string]map[string][]byte
+	ingresses []interface{}
+	services  map[string]map[string]interface{}
+	endpoints map[string]map[string]interface{}
 }
 
-func New() *mockapi {
-	a := &mockapi{
-		services:  make(map[string]map[string][]byte),
-		endpoints: make(map[string]map[string][]byte),
+func New() *MockAPI {
+	a := &MockAPI{
+		services:  make(map[string]map[string]interface{}),
+		endpoints: make(map[string]map[string]interface{}),
 	}
 
 	a.updateMux()
 	return a
 }
 
-func Jsonify(obj interface{}) (interface{}, error) {
-	switch objt := obj.(type) {
-	case map[interface{}]interface{}:
-		ms := make(map[string]interface{})
-		for k, v := range objt {
-			switch kt := k.(type) {
-			case string:
-				v, err := Jsonify(v)
-				if err != nil {
-					return nil, err
-				}
+func getName(obj interface{}) (ns string, n string) {
+	jsonObj, ok := obj.(map[string]interface{})
+	if !ok {
+		return
+	}
 
-				ms[kt] = v
-			default:
-				return nil, errors.New("unaccepted key type")
-			}
+	metaObj, ok := jsonObj["metadata"].(map[string]interface{})
+	if !ok {
+		return
+	}
+
+	ns, ok = metaObj["namespace"].(string)
+	if !ok {
+		return
+	}
+
+	n, ok = metaObj["name"].(string)
+	if !ok {
+		return
+	}
+
+	return
+}
+
+func findIndexByName(list []interface{}, ns, n string) int {
+	for i, item := range list {
+		obj, ok := item.(map[string]interface{})
+		if !ok {
+			continue
 		}
 
-		return ms, nil
-	case []interface{}:
-		for i := range objt {
-			v, err := Jsonify(objt[i])
-			if err != nil {
-				return nil, err
-			}
-
-			objt[i] = v
+		meta, ok := obj["metadata"].(map[string]interface{})
+		if !ok {
+			continue
 		}
 
-		return objt, nil
-	case int:
-		return float64(objt), nil
-	default:
-		return obj, nil
+		if meta["namespace"] == ns && meta["name"] == n {
+			return i
+		}
+	}
+
+	return -1
+}
+
+func deleteByName(specs []interface{}, ns, n string) []interface{} {
+	i := findIndexByName(specs, ns, n)
+	if i < 0 {
+		return nil
+	}
+
+	specs[i], specs[len(specs)-1] = specs[len(specs)-1], nil
+	return specs[:len(specs)-1]
+}
+
+func unmarshalYAMLs(b []byte) ([]interface{}, error) {
+	dec := yaml.NewYAMLToJSONDecoder(bytes.NewBuffer(b))
+
+	var result []interface{}
+	for {
+		var obj interface{}
+		if err := dec.Decode(&obj); err == io.EOF {
+			return result, nil
+		} else if err != nil {
+			return nil, err
+		}
+
+		result = append(result, obj)
 	}
 }
 
-func yamlToJSON(y []byte) ([]byte, error) {
-	var obj interface{}
-	if err := yaml.Unmarshal([]byte(y), &obj); err != nil {
-		return nil, err
+func (a *MockAPI) updateMux() error {
+	if a.ingresses == nil {
+		// never 404, see ServeHTTP
+		a.ingresses = make([]interface{}, 0)
 	}
 
-	obj, err := Jsonify(obj)
-	if err != nil {
-		return nil, err
-	}
-
-	return json.Marshal(obj)
-}
-
-func (a *mockapi) updateMux() error {
 	mux := &pathmux.Tree{}
 
 	var err error
-	add := func(path string, res interface{}) {
+	add := func(path string, r interface{}) {
 		if err != nil {
 			return
 		}
 
-		err = mux.Add(path, res)
+		err = mux.Add(path, r)
 	}
 
-	add("/apis/extensions/v1beta1/ingresses", a.ingress)
 	add("/api/v1/namespaces/:namespace/services/:name", a.services)
 	add("/api/v1/namespaces/:namespace/endpoints/:name", a.endpoints)
+	add("/apis/extensions/v1beta1/ingresses", a.ingresses)
 
 	a.mux = mux
 	return err
 }
 
-func (a *mockapi) setServiceJSON(m map[string]map[string][]byte, ns, name string, j []byte) error {
-	a.sync.Lock()
-	defer a.sync.Unlock()
-	if _, ok := m[ns]; !ok {
-		m[ns] = make(map[string][]byte)
+func mergeMap(l ...[]interface{}) map[string]map[string]interface{} {
+	m := make(map[string]map[string]interface{})
+	for i := range l {
+		for j := range l[i] {
+			ns, n := getName(l[i][j])
+			if _, ok := m[ns]; !ok {
+				m[ns] = make(map[string]interface{})
+			}
+
+			m[ns][n] = l[i][j]
+		}
 	}
 
-	m[ns][name] = []byte(j)
-	return a.updateMux()
+	return m
 }
 
-func (a *mockapi) setServiceYAML(m map[string]map[string][]byte, ns, name string, y []byte) error {
-	j, err := yamlToJSON(y)
+func mapToList(m map[string]map[string]interface{}) []interface{} {
+	var l []interface{}
+	for _, ns := range m {
+		for _, obj := range ns {
+			l = append(l, obj)
+		}
+	}
+
+	return l
+}
+
+func mergeList(l ...[]interface{}) []interface{} {
+	unique := mergeMap(l...)
+	return mapToList(unique)
+}
+
+func (a *MockAPI) loadMapped(field *map[string]map[string]interface{}, y string) error {
+	obj, err := unmarshalYAMLs([]byte(y))
 	if err != nil {
 		return err
 	}
 
-	return a.setServiceJSON(m, ns, name, j)
-}
-
-func (a *mockapi) SetServiceJSON(namespace, name, j string) error {
-	return a.setServiceJSON(a.services, namespace, name, []byte(j))
-}
-
-func (a *mockapi) SetServiceYAML(namespace, name, y string) error {
-	return a.setServiceYAML(a.services, namespace, name, []byte(y))
-}
-
-func (a *mockapi) SetEndpointsJSON(namespace, name, j string) error {
-	return a.setServiceJSON(a.endpoints, namespace, name, []byte(j))
-}
-
-func (a *mockapi) SetEndpointsYAML(namespace, name, y string) error {
-	return a.setServiceYAML(a.endpoints, namespace, name, []byte(y))
-}
-
-func (a *mockapi) setIngressJSON(j []byte) error {
 	a.sync.Lock()
 	defer a.sync.Unlock()
-	a.ingress = j
+	*field = mergeMap(mapToList(*field), obj)
 	return a.updateMux()
 }
 
-func (a *mockapi) SetIngressJSON(j string) error {
-	return a.setIngressJSON([]byte(j))
+func (a *MockAPI) deleteFromMap(field map[string]map[string]interface{}, ns, n string) {
+	a.sync.Lock()
+	defer a.sync.Unlock()
+
+	nsm, ok := field[ns]
+	if !ok {
+		return
+	}
+
+	delete(nsm, n)
+	a.updateMux()
 }
 
-func (a *mockapi) SetIngressYAML(y string) error {
-	j, err := yamlToJSON([]byte(y))
+func (a *MockAPI) LoadServices(y string) error {
+	return a.loadMapped(&a.services, y)
+}
+
+func (a *MockAPI) DeleteService(ns, n string) {
+	a.deleteFromMap(a.services, ns, n)
+}
+
+func (a *MockAPI) LoadEndpoints(y string) error {
+	return a.loadMapped(&a.endpoints, y)
+}
+
+func (a *MockAPI) DeleteEndpoint(ns, n string) {
+	a.deleteFromMap(a.endpoints, ns, n)
+}
+
+func (a *MockAPI) LoadIngresses(y string) error {
+	obj, err := unmarshalYAMLs([]byte(y))
 	if err != nil {
 		return err
 	}
 
-	return a.setIngressJSON(j)
+	a.sync.Lock()
+	defer a.sync.Unlock()
+	a.ingresses = mergeList(a.ingresses, obj)
+	return a.updateMux()
 }
 
-func (a *mockapi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Println(r.URL.Path)
+func (a *MockAPI) DeleteIngress(ns, n string) {
+	a.sync.Lock()
+	defer a.sync.Unlock()
+	a.ingresses = deleteByName(a.ingresses, ns, n)
+	a.updateMux()
+}
 
+func (a *MockAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.sync.RLock()
-	res, p := a.mux.Lookup(r.URL.Path)
+	rt, p := a.mux.Lookup(r.URL.Path)
 	a.sync.RUnlock()
 
-	if res == nil {
+	if rt == nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	switch rest := res.(type) {
-	case []byte:
-		w.Write(rest)
-	case map[string]map[string][]byte:
-		d, ok := rest[p["namespace"]][p["name"]]
+	var d interface{}
+	switch rtt := rt.(type) {
+	case []interface{}:
+		d = map[string]interface{}{
+			"items": rt,
+		}
+	case map[string]map[string]interface{}:
+		var ok bool
+		d, ok = rtt[p["namespace"]][p["name"]]
 		if !ok {
+			log.Println("not found:", p["namespace"], p["name"])
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-
-		w.Write(d)
 	default:
+		log.Println("invalid data type")
 		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
+
+	b, err := json.Marshal(d)
+	if err != nil {
+		log.Println("marshal failed", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(b)
 }
