@@ -1,14 +1,14 @@
 # Skipper Ingress Controller
 
 This documentation is meant for for cluster operators and describes
-how to install skipper as Ingress-Controller into your Kubernetes
+how to install Skipper as Ingress-Controller into your Kubernetes
 Cluster.
 
 ## Why you should use skipper as ingress controller?
 
 Baremetal loadbalancer perform really well, but the configuration is
 not updated frequently and most of these installations are not meant
-to rapidly change. With introducing kubernetes this will change and
+to rapidly change. With introducing Kubernetes this will change and
 there is a need of rapid changing http routers. Skipper is designed
 for rapidly changing it's routing tree.
 
@@ -20,10 +20,10 @@ and [more](ingress-usage.md).
 
 ## What is an Ingress-Controller?
 
-Ingress-controllers are serving http requests into a kubernetes
+Ingress-controllers are serving http requests into a Kubernetes
 cluster. Most of the time traffic will pass ingress got to a
-kubernetes service IP which will forward the packets to kubernetes PODs
-selected by the kubernetes service.
+Kubernetes service IP which will forward the packets to Kubernetes Pods
+selected by the Kubernetes service.
 For having a successful ingress, you need to have a DNS name pointing
 to some stable IP addresses that act as a loadbalancer.
 
@@ -42,9 +42,9 @@ Skipper does not use [Kubernetes
 Services](http://kubernetes.io/docs/user-guide/services) to route
 traffic to the pods. Instead it uses the Endpoints API to bypass
 kube-proxy created iptables to remove overhead like conntrack entries
-for iptables DNAT. Skipper can also reuse connections to PODs, such
+for iptables DNAT. Skipper can also reuse connections to Pods, such
 that you have no overhead in establishing connections all the time. To
-prevent errors on node failures, skipper also does automatically
+prevent errors on node failures, Skipper also does automatically
 retries to another endpoint in case it gets a connection refused or
 TLS handshake error to the endpoint.  Other reasons are future support
 of features like session affinity, different loadbalancer
@@ -54,13 +54,13 @@ algorithms or distributed loadbalancing also known as service mesh.
 
 In AWS, this could be an ALB with DNS pointing to the ALB. The ALB can
 then point to an ingress-controller running on an EC2 node and uses
-Kubernetes `hostnetwork` port specification in the POD spec.
+Kubernetes `hostnetwork` port specification in the Pod spec.
 
 A logical overview of the traffic flow in AWS is shown in this picture:
 
 ![logical ingress-traffic-flow](../img/ingress-traffic-flow-aws.svg)
 
-We described that skipper bypasses Kubernetes Service and use directly
+We described that Skipper bypasses Kubernetes Service and use directly
 endpoints for [good reasons](https://opensource.zalando.com/skipper/kubernetes/ingress-controller/#why-skipper-uses-endpoints-and-not-services),
 therefore the real traffic flow is shown in the next picture.
 ![technical ingress-traffic-flow](../img/ingress-traffic-flow-aws-technical.svg)
@@ -93,7 +93,7 @@ minimal example:
 * layer 4 loadbalancer has `1.2.3.4:80` as socket for a virtual server pointing to all skipper ingress
 * `*.ingress.example.com` points to 1.2.3.4
 * ingress object with host entry for `myapp.ingress.example.com` targets a service type ClusterIP
-* service type ClusterIP has a selector that targets your PODs of your myapp deployment
+* service type ClusterIP has a selector that targets your Pods of your myapp deployment
 
 TLS example:
 
