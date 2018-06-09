@@ -27,6 +27,7 @@ const (
 )
 
 const initialServices = `
+kind: Service
 metadata:
   namespace: test-namespace
   name: test-service-1
@@ -37,6 +38,7 @@ spec:
     port: 80
     targetPort: 80
 ---
+kind: Service
 metadata:
   namespace: test-namespace
   name: test-service-2
@@ -49,6 +51,7 @@ spec:
 `
 
 const initialEndpoints = `
+kind: Endpoint
 metadata:
   namespace: test-namespace
   name: test-service-1
@@ -60,6 +63,7 @@ subsets:
     - port: 80
     - port: 80
 ---
+kind: Endpoint
 metadata:
   namespace: test-namespace
   name: test-service-2
@@ -73,6 +77,7 @@ subsets:
 `
 
 const initialIngresses = `
+kind: Ingress
 metadata:
   namespace: test-namespace
   name: test-ingress-1
@@ -86,6 +91,7 @@ spec:
               serviceName: test-service-1
               servicePort: 80
 ---
+kind: Ingress
 metadata:
   namespace: test-namespace
   name: test-ingress-2
@@ -101,6 +107,7 @@ spec:
 `
 
 const updatedServices = `
+kind: Service
 metadata:
   namespace: test-namespace
   name: test-service-1
@@ -111,6 +118,7 @@ spec:
     port: 8080
     targetPort: 8080
 ---
+kind: Service
 metadata:
   namespace: test-namespace
   name: test-service-3
@@ -123,6 +131,7 @@ spec:
 `
 
 const updatedEndpoints = `
+kind: Endpoint
 metadata:
   namespace: test-namespace
   name: test-service-2
@@ -134,6 +143,7 @@ subsets:
     - port: 8080
     - port: 8080
 ---
+kind: Endpoint
 metadata:
   namespace: test-namespace
   name: test-service-3
@@ -147,6 +157,7 @@ subsets:
 `
 
 const updatedIngresses = `
+kind: Ingress
 metadata:
   namespace: test-namespace
   name: test-ingress-1
@@ -160,6 +171,7 @@ spec:
               serviceName: test-service-1
               servicePort: 80
 ---
+kind: Ingress
 metadata:
   namespace: test-namespace
   name: test-ingress-3
@@ -174,6 +186,61 @@ spec:
               servicePort: 7272
 `
 
+const singleDoc = `
+kind: Service
+metadata:
+  namespace: test-namespace
+  name: test-service-1
+spec:
+  clusterIP: 10.0.0.1
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+---
+kind: Endpoint
+metadata:
+  namespace: test-namespace
+  name: test-service-1
+subsets:
+  addresses:
+    - ip: 10.0.1.1
+    - ip: 10.0.1.2
+  ports:
+    - port: 80
+    - port: 80
+---
+kind: Ingress
+metadata:
+  namespace: test-namespace
+  name: test-ingress-1
+spec:
+  rules:
+    - host: www.example.org
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: test-service-1
+              servicePort: 80
+`
+
+const singleIngress = `
+kind: Ingress
+metadata:
+  namespace: test-namespace
+  name: test-ingress-1
+spec:
+  rules:
+    - host: www.example.org
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: test-service-1
+              servicePort: 80
+`
+
 type sortMeta []interface{}
 
 func (sm sortMeta) Len() int      { return len(sm) }
@@ -185,12 +252,23 @@ func (sm sortMeta) Less(i, j int) bool {
 	return fmt.Sprintf("%s/%s", nsi, ni) < fmt.Sprintf("%s/%s", nsj, nj)
 }
 
-func initAPI() *MockAPI {
+func initAPI() (*MockAPI, error) {
 	mapi := New()
-	mapi.LoadServices(initialServices)
-	mapi.LoadEndpoints(initialEndpoints)
-	mapi.LoadIngresses(initialIngresses)
-	return mapi
+
+	var err error
+	load := func(f func(string) error, doc string) {
+		if err != nil {
+			return
+		}
+
+		err = f(doc)
+	}
+
+	load(mapi.LoadServices, initialServices)
+	load(mapi.LoadEndpoints, initialEndpoints)
+	load(mapi.LoadIngresses, initialIngresses)
+
+	return mapi, err
 }
 
 func apiGet(urlBase, uriFmt string, params ...interface{}) ([]byte, error) {
@@ -366,7 +444,11 @@ func testList(t *testing.T, baseURL, uri string, specSources ...string) {
 
 func Test(t *testing.T) {
 	t.Run("initial", func(t *testing.T) {
-		api := initAPI()
+		api, err := initAPI()
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		s := httptest.NewServer(api)
 		defer s.Close()
 
@@ -378,7 +460,11 @@ func Test(t *testing.T) {
 	})
 
 	t.Run("append and overwrite", func(t *testing.T) {
-		api := initAPI()
+		api, err := initAPI()
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		s := httptest.NewServer(api)
 		defer s.Close()
 
@@ -396,7 +482,11 @@ func Test(t *testing.T) {
 	})
 
 	t.Run("delete", func(t *testing.T) {
-		api := initAPI()
+		api, err := initAPI()
+		if err != nil {
+			t.Fatal(err)
+		}
+
 		s := httptest.NewServer(api)
 		defer s.Close()
 
@@ -418,7 +508,31 @@ func Test(t *testing.T) {
 }
 
 func TestSingleDoc(t *testing.T) {
+	api := New()
+	s := httptest.NewServer(api)
+	defer s.Close()
+
+	api.Load(singleDoc)
+
+	testSpec(t, s.URL, servicesURIFmt, initialService1, initialServices)
+	// testSpec(t, s.URL, endpointsURIFmt, initialService1, initialEndpoints)
+	// testList(t, s.URL, ingressesURI, singleIngress)
 }
 
 func TestReset(t *testing.T) {
+	api, err := initAPI()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := httptest.NewServer(api)
+	defer s.Close()
+
+	api.Reset(singleDoc)
+
+	testSpec(t, s.URL, servicesURIFmt, initialService1, initialServices)
+	testSpecMissing(t, s.URL, servicesURIFmt, initialService2)
+	testSpec(t, s.URL, endpointsURIFmt, initialService1, initialEndpoints)
+	testSpecMissing(t, s.URL, endpointsURIFmt, initialService2)
+	testList(t, s.URL, ingressesURI, singleIngress)
 }

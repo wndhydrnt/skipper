@@ -14,6 +14,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/zalando/skipper/pathmux"
@@ -62,6 +63,16 @@ func getName(obj interface{}) (ns string, n string) {
 	return
 }
 
+func getKind(obj interface{}) string {
+	jsonObj, ok := obj.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+
+	kind, _ := jsonObj["kind"].(string)
+	return kind
+}
+
 func findIndexByName(list []interface{}, ns, n string) int {
 	for i, item := range list {
 		obj, ok := item.(map[string]interface{})
@@ -80,6 +91,17 @@ func findIndexByName(list []interface{}, ns, n string) int {
 	}
 
 	return -1
+}
+
+func findByKind(list []interface{}, kind string) []interface{} {
+	var ofKind []interface{}
+	for _, obj := range list {
+		if strings.ToLower(getKind(obj)) == strings.ToLower(kind) {
+			ofKind = append(ofKind, obj)
+		}
+	}
+
+	return ofKind
 }
 
 func deleteByName(specs []interface{}, ns, n string) []interface{} {
@@ -223,6 +245,48 @@ func (a *MockAPI) DeleteIngress(ns, n string) {
 	defer a.sync.Unlock()
 	a.ingresses = deleteByName(a.ingresses, ns, n)
 	a.updateMux()
+}
+
+func (a *MockAPI) Load(doc string) error {
+	specs, err := unmarshalYAMLs([]byte(doc))
+	if err != nil {
+		return err
+	}
+
+	services := findByKind(specs, "service")
+	endpoints := findByKind(specs, "endpoint")
+	ingresses := findByKind(specs, "ingress")
+
+	a.sync.Lock()
+	defer a.sync.Unlock()
+
+	a.services = mergeMap(mapToList(a.services), services)
+	a.endpoints = mergeMap(mapToList(a.endpoints), endpoints)
+	a.ingresses = mergeList(a.ingresses, ingresses)
+
+	a.updateMux()
+	return nil
+}
+
+func (a *MockAPI) Reset(doc string) error {
+	specs, err := unmarshalYAMLs([]byte(doc))
+	if err != nil {
+		return err
+	}
+
+	services := findByKind(specs, "service")
+	endpoints := findByKind(specs, "endpoint")
+	ingresses := findByKind(specs, "ingress")
+
+	a.sync.Lock()
+	defer a.sync.Unlock()
+
+	a.services = mergeMap(services)
+	a.endpoints = mergeMap(endpoints)
+	a.ingresses = mergeList(ingresses)
+
+	a.updateMux()
+	return nil
 }
 
 func (a *MockAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
