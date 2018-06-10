@@ -515,8 +515,8 @@ func TestSingleDoc(t *testing.T) {
 	api.Load(singleDoc)
 
 	testSpec(t, s.URL, servicesURIFmt, initialService1, initialServices)
-	// testSpec(t, s.URL, endpointsURIFmt, initialService1, initialEndpoints)
-	// testList(t, s.URL, ingressesURI, singleIngress)
+	testSpec(t, s.URL, endpointsURIFmt, initialService1, initialEndpoints)
+	testList(t, s.URL, ingressesURI, singleIngress)
 }
 
 func TestReset(t *testing.T) {
