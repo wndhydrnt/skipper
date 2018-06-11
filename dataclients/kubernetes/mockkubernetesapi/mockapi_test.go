@@ -442,69 +442,67 @@ func testList(t *testing.T, baseURL, uri string, specSources ...string) {
 	testListSpecs(t, baseURL, uri, expectedSpecs)
 }
 
-func Test(t *testing.T) {
-	t.Run("initial", func(t *testing.T) {
-		api, err := initAPI()
-		if err != nil {
-			t.Fatal(err)
-		}
+func TestInitial(t *testing.T) {
+	api, err := initAPI()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		s := httptest.NewServer(api)
-		defer s.Close()
+	s := httptest.NewServer(api)
+	defer s.Close()
 
-		testSpec(t, s.URL, servicesURIFmt, initialService1, initialServices)
-		testSpec(t, s.URL, servicesURIFmt, initialService2, initialServices)
-		testSpec(t, s.URL, endpointsURIFmt, initialService1, initialEndpoints)
-		testSpec(t, s.URL, endpointsURIFmt, initialService2, initialEndpoints)
-		testList(t, s.URL, ingressesURI, initialIngresses)
-	})
+	testSpec(t, s.URL, servicesURIFmt, initialService1, initialServices)
+	testSpec(t, s.URL, servicesURIFmt, initialService2, initialServices)
+	testSpec(t, s.URL, endpointsURIFmt, initialService1, initialEndpoints)
+	testSpec(t, s.URL, endpointsURIFmt, initialService2, initialEndpoints)
+	testList(t, s.URL, ingressesURI, initialIngresses)
+}
 
-	t.Run("append and overwrite", func(t *testing.T) {
-		api, err := initAPI()
-		if err != nil {
-			t.Fatal(err)
-		}
+func TestAppendAndOverwrite(t *testing.T) {
+	api, err := initAPI()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		s := httptest.NewServer(api)
-		defer s.Close()
+	s := httptest.NewServer(api)
+	defer s.Close()
 
-		api.LoadServices(updatedServices)
-		api.LoadEndpoints(updatedEndpoints)
-		api.LoadIngresses(updatedIngresses)
+	api.LoadServices(updatedServices)
+	api.LoadEndpoints(updatedEndpoints)
+	api.LoadIngresses(updatedIngresses)
 
-		testSpec(t, s.URL, servicesURIFmt, initialService1, initialServices, updatedServices)
-		testSpec(t, s.URL, servicesURIFmt, initialService2, initialServices, updatedServices)
-		testSpec(t, s.URL, servicesURIFmt, initialService3, initialServices, updatedServices)
-		testSpec(t, s.URL, endpointsURIFmt, initialService1, initialEndpoints, updatedEndpoints)
-		testSpec(t, s.URL, endpointsURIFmt, initialService2, initialEndpoints, updatedEndpoints)
-		testSpec(t, s.URL, endpointsURIFmt, initialService3, initialEndpoints, updatedEndpoints)
-		testList(t, s.URL, ingressesURI, initialIngresses, updatedIngresses)
-	})
+	testSpec(t, s.URL, servicesURIFmt, initialService1, initialServices, updatedServices)
+	testSpec(t, s.URL, servicesURIFmt, initialService2, initialServices, updatedServices)
+	testSpec(t, s.URL, servicesURIFmt, initialService3, initialServices, updatedServices)
+	testSpec(t, s.URL, endpointsURIFmt, initialService1, initialEndpoints, updatedEndpoints)
+	testSpec(t, s.URL, endpointsURIFmt, initialService2, initialEndpoints, updatedEndpoints)
+	testSpec(t, s.URL, endpointsURIFmt, initialService3, initialEndpoints, updatedEndpoints)
+	testList(t, s.URL, ingressesURI, initialIngresses, updatedIngresses)
+}
 
-	t.Run("delete", func(t *testing.T) {
-		api, err := initAPI()
-		if err != nil {
-			t.Fatal(err)
-		}
+func TestDelete(t *testing.T) {
+	api, err := initAPI()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		s := httptest.NewServer(api)
-		defer s.Close()
+	s := httptest.NewServer(api)
+	defer s.Close()
 
-		api.DeleteService(testNamespace, initialService1)
-		api.DeleteEndpoint(testNamespace, initialService1)
-		api.DeleteIngress(testNamespace, initialIngress1)
+	api.DeleteService(testNamespace, initialService1)
+	api.DeleteEndpoint(testNamespace, initialService1)
+	api.DeleteIngress(testNamespace, initialIngress1)
 
-		expectedIngresses, err := removeSpec(initialIngress1, initialIngresses)
-		if err != nil {
-			t.Fatal(err)
-		}
+	expectedIngresses, err := removeSpec(initialIngress1, initialIngresses)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		testSpecMissing(t, s.URL, servicesURIFmt, initialService1)
-		testSpec(t, s.URL, servicesURIFmt, initialService2, initialServices)
-		testSpecMissing(t, s.URL, endpointsURIFmt, initialService1)
-		testSpec(t, s.URL, endpointsURIFmt, initialService2, initialEndpoints)
-		testListSpecs(t, s.URL, ingressesURI, expectedIngresses)
-	})
+	testSpecMissing(t, s.URL, servicesURIFmt, initialService1)
+	testSpec(t, s.URL, servicesURIFmt, initialService2, initialServices)
+	testSpecMissing(t, s.URL, endpointsURIFmt, initialService1)
+	testSpec(t, s.URL, endpointsURIFmt, initialService2, initialEndpoints)
+	testListSpecs(t, s.URL, ingressesURI, expectedIngresses)
 }
 
 func TestSingleDoc(t *testing.T) {
