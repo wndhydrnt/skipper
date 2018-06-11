@@ -209,6 +209,10 @@ func (a *MockAPI) deleteFromMap(field map[string]map[string]interface{}, ns, n s
 	}
 
 	delete(nsm, n)
+	if len(field[ns]) == 0 {
+		delete(field, ns)
+	}
+
 	a.updateMux()
 }
 
