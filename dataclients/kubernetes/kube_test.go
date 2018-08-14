@@ -660,6 +660,57 @@ func TestIngressData(t *testing.T) {
 			"kube_foo__qux__0__www3_example_org_foo____": "",
 			"kube___catchall__www3_example_org____":      "",
 		},
+	}, {
+		"skipper-predicates annotation",
+		services{
+			"foo": map[string]*service{
+				"bar": testService("1.2.3.4", map[string]int{"baz": 8181}),
+			},
+		},
+		[]*ingressItem{testIngress(
+			"foo",
+			"qux",
+			"",
+			"",
+			"",
+			`Method("OPTIONS")`,
+			"",
+			"",
+			backendPort{},
+			1.0,
+			testRule(
+				"www1.example.org",
+				testPathRule(
+					"/",
+					"bar",
+					backendPort{"baz"},
+				),
+			),
+		), testIngress(
+			"foo",
+			"qux2",
+			"",
+			"",
+			"",
+			`Method("GET")`,
+			"",
+			"",
+			backendPort{},
+			1.0,
+			testRule(
+				"www1.example.org",
+				testPathRule(
+					"/",
+					"bar",
+					backendPort{"baz"},
+				),
+			),
+		),
+		},
+		map[string]string{
+			"kube_foo__qux__www1_example_org_____01e9d474189f9192__bar":  "http://1.2.3.4:8181",
+			"kube_foo__qux2__www1_example_org_____57be0900f1008bc4__bar": "http://1.2.3.4:8181",
+		},
 	}} {
 		t.Run(ti.msg, func(t *testing.T) {
 			api := newTestAPI(t, ti.services, &ingressList{Items: ti.ingresses})
@@ -1494,7 +1545,7 @@ func TestConvertPathRuleTraffic(t *testing.T) {
 				},
 			},
 			route: &eskip.Route{
-				Id:      routeID("namespace1", "", "", "", "service1"),
+				Id:      routeID("namespace1", "", "", "", "service1", ""),
 				Backend: "http://1.2.3.4:8080",
 				Predicates: []*eskip.Predicate{
 					{
@@ -1515,7 +1566,7 @@ func TestConvertPathRuleTraffic(t *testing.T) {
 				},
 			},
 			route: &eskip.Route{
-				Id:      routeID("namespace1", "", "", "", "service1"),
+				Id:      routeID("namespace1", "", "", "", "service1", ""),
 				Backend: "http://1.2.3.4:8080",
 			},
 		},
@@ -1530,7 +1581,7 @@ func TestConvertPathRuleTraffic(t *testing.T) {
 				},
 			},
 			route: &eskip.Route{
-				Id:      routeID("namespace1", "", "", "", "service1"),
+				Id:      routeID("namespace1", "", "", "", "service1", ""),
 				Backend: "http://1.2.3.4:8080",
 			},
 		},
@@ -1551,7 +1602,7 @@ func TestConvertPathRuleTraffic(t *testing.T) {
 				return
 			}
 
-			route, err := dc.convertPathRule("namespace1", "", "", tc.rule, KubernetesIngressMode, map[string][]string{})
+			route, err := dc.convertPathRule("namespace1", "", "", "", tc.rule, KubernetesIngressMode, map[string][]string{})
 			if err != nil {
 				t.Errorf("should not fail: %v", err)
 			}

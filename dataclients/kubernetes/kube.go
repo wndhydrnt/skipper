@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"bytes"
+	"crypto/sha1"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -448,20 +449,33 @@ func (c *Client) getServiceURL(svc *service, port backendPort) (string, error) {
 }
 
 // TODO: find a nicer way to autogenerate route IDs
-func routeID(namespace, name, host, path, backend string) string {
+func routeID(namespace, name, host, path, backend, predicate string) string {
 	namespace = nonWord.ReplaceAllString(namespace, "_")
 	name = nonWord.ReplaceAllString(name, "_")
 	host = nonWord.ReplaceAllString(host, "_")
 	path = nonWord.ReplaceAllString(path, "_")
 	backend = nonWord.ReplaceAllString(backend, "_")
+	if predicate != "" {
+		return fmt.Sprintf("kube_%s__%s__%s__%s__%s__%s", namespace, name, host, path, predicate, backend)
+	}
 	return fmt.Sprintf("kube_%s__%s__%s__%s__%s", namespace, name, host, path, backend)
+
 }
 
 // routeIDForCustom generates a route id for a custom route of an ingress
 // resource.
-func routeIDForCustom(namespace, name, id, host string, index int) string {
+func routeIDForCustom(namespace, name, id, host, pred string, index int) string {
 	name = name + "_" + id + "_" + strconv.Itoa(index)
-	return routeID(namespace, name, host, "", "")
+	return routeID(namespace, name, host, "", "", pred)
+}
+
+func predicateToTruncatedHash(p string) string {
+	if p == "" {
+		return ""
+	}
+	h := sha1.New()
+	h.Write([]byte(p))
+	return fmt.Sprintf("%x", h.Sum(nil)[0:8])
 }
 
 // converts the default backend if any
@@ -486,6 +500,11 @@ func (c *Client) convertDefaultBackend(i *ingressItem) ([]*eskip.Route, bool, er
 		svcName = i.Spec.DefaultBackend.ServiceName
 		svcPort = i.Spec.DefaultBackend.ServicePort
 	)
+
+	pred := ""
+	if ps, ok := i.Metadata.Annotations[skipperpredicateAnnotationKey]; ok {
+		pred = predicateToTruncatedHash(ps)
+	}
 
 	svc, err := c.getService(ns, svcName)
 	if err != nil {
@@ -522,7 +541,7 @@ func (c *Client) convertDefaultBackend(i *ingressItem) ([]*eskip.Route, bool, er
 		}
 
 		r := &eskip.Route{
-			Id:      routeID(ns, name, "", "", ""),
+			Id:      routeID(ns, name, "", "", "", pred),
 			Backend: address,
 		}
 		routes = append(routes, r)
@@ -530,7 +549,7 @@ func (c *Client) convertDefaultBackend(i *ingressItem) ([]*eskip.Route, bool, er
 		return nil, false, err
 	}
 
-	group := routeID(ns, name, "", "", "")
+	group := routeID(ns, name, "", "", "", pred)
 
 	// TODO:
 	// - don't do load balancing if there's only a single endpoint
@@ -543,7 +562,7 @@ func (c *Client) convertDefaultBackend(i *ingressItem) ([]*eskip.Route, bool, er
 
 	if len(eps) == 1 {
 		r := &eskip.Route{
-			Id:      routeID(ns, name, "", "", ""),
+			Id:      routeID(ns, name, "", "", "", pred),
 			Backend: eps[0],
 		}
 		routes = append(routes, r)
@@ -552,7 +571,7 @@ func (c *Client) convertDefaultBackend(i *ingressItem) ([]*eskip.Route, bool, er
 
 	for idx, ep := range eps {
 		r := &eskip.Route{
-			Id:      routeID(ns, name, "", "", strconv.Itoa(idx)),
+			Id:      routeID(ns, name, "", "", strconv.Itoa(idx), pred),
 			Backend: ep,
 			Predicates: []*eskip.Predicate{{
 				Name: loadbalancer.MemberPredicateName,
@@ -572,7 +591,7 @@ func (c *Client) convertDefaultBackend(i *ingressItem) ([]*eskip.Route, bool, er
 	}
 
 	decisionRoute := &eskip.Route{
-		Id:          routeID(ns, name, "", "", "") + "__lb_group",
+		Id:          routeID(ns, name, "", "", "", pred) + "__lb_group",
 		BackendType: eskip.LoopBackend,
 		Predicates: []*eskip.Predicate{{
 			Name: loadbalancer.GroupPredicateName,
@@ -632,7 +651,7 @@ func setPath(m PathMode, r *eskip.Route, p string) {
 }
 
 func (c *Client) convertPathRule(
-	ns, name, host string,
+	ns, name, host, pred string,
 	prule *pathRule,
 	pathMode PathMode,
 	endpointsURLs map[string][]string,
@@ -683,7 +702,7 @@ func (c *Client) convertPathRule(
 				return nil, err2
 			}
 			r := &eskip.Route{
-				Id:      routeID(ns, name, host, prule.Path, svcName),
+				Id:      routeID(ns, name, host, prule.Path, svcName, pred),
 				Backend: address,
 			}
 
@@ -710,7 +729,7 @@ func (c *Client) convertPathRule(
 
 	if len(eps) == 1 {
 		r := &eskip.Route{
-			Id:      routeID(ns, name, host, prule.Path, svcName),
+			Id:      routeID(ns, name, host, prule.Path, svcName, pred),
 			Backend: eps[0],
 		}
 
@@ -732,10 +751,10 @@ func (c *Client) convertPathRule(
 		return routes, nil
 	}
 
-	group := routeID(ns, name, host, prule.Path, prule.Backend.ServiceName)
+	group := routeID(ns, name, host, prule.Path, prule.Backend.ServiceName, pred)
 	for idx, ep := range eps {
 		r := &eskip.Route{
-			Id:      routeID(ns, name, host, prule.Path, svcName+fmt.Sprintf("_%d", idx)),
+			Id:      routeID(ns, name, host, prule.Path, svcName+fmt.Sprintf("_%d", idx), pred),
 			Backend: ep,
 			Predicates: []*eskip.Predicate{{
 				Name: loadbalancer.MemberPredicateName,
@@ -757,7 +776,7 @@ func (c *Client) convertPathRule(
 	}
 
 	decisionRoute := &eskip.Route{
-		Id:          routeID(ns, name, host, prule.Path, svcName) + "__lb_group",
+		Id:          routeID(ns, name, host, prule.Path, svcName, pred) + "__lb_group",
 		BackendType: eskip.LoopBackend,
 		Predicates: []*eskip.Predicate{{
 			Name: loadbalancer.GroupPredicateName,
@@ -899,6 +918,11 @@ func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 			}
 		}
 
+		pred := ""
+		if ps, ok := i.Metadata.Annotations[skipperpredicateAnnotationKey]; ok {
+			pred = predicateToTruncatedHash(ps)
+		}
+
 		// We need this to avoid asking the k8s API for the same services
 		endpointsURLs := make(map[string][]string)
 		for _, rule := range i.Spec.Rules {
@@ -920,7 +944,7 @@ func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 				for idx, r := range extraRoutes {
 					route := *r
 					route.HostRegexps = host
-					route.Id = routeIDForCustom(i.Metadata.Namespace, i.Metadata.Name, route.Id, rule.Host+strings.Replace(prule.Path, "/", "_", -1), idx)
+					route.Id = routeIDForCustom(i.Metadata.Namespace, i.Metadata.Name, route.Id, rule.Host+strings.Replace(prule.Path, "/", "_", -1), pred, idx)
 					setPath(pathMode, &route, prule.Path)
 					if i := countPathRoutes(&route); i <= 1 {
 						hostRoutes[rule.Host] = append(hostRoutes[rule.Host], &route)
@@ -935,6 +959,7 @@ func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 						i.Metadata.Namespace,
 						i.Metadata.Name,
 						rule.Host,
+						pred,
 						prule,
 						pathMode,
 						endpointsURLs,
@@ -988,7 +1013,7 @@ func (c *Client) ingressToRoutes(items []*ingressItem) ([]*eskip.Route, error) {
 		// defined for the host name, create a route which returns 404
 		if len(rs) > 0 && !catchAllRoutes(rs) {
 			catchAll := &eskip.Route{
-				Id:          routeID("", "catchall", host, "", ""),
+				Id:          routeID("", "catchall", host, "", "", ""),
 				HostRegexps: rs[0].HostRegexps,
 				BackendType: eskip.ShuntBackend,
 			}
