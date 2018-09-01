@@ -18,6 +18,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -28,6 +29,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zalando/skipper"
 	"github.com/zalando/skipper/dataclients/kubernetes"
+	"github.com/zalando/skipper/filters/auth"
 	"github.com/zalando/skipper/proxy"
 )
 
@@ -143,6 +145,9 @@ const (
 	oauth2TokeninfoTimeoutUsage          = "sets the default tokeninfo request timeout duration to 2000ms"
 	oauth2TokenintrospectionTimeoutUsage = "sets the default tokenintrospection request timeout duration to 2000ms"
 	webhookTimeoutUsage                  = "sets the webhook request timeout duration, defaults to 2s"
+	// OIDC:
+	oauthOIDCProviderURLUsage           = "sets the default oidc provider URL to use in the oauthOidc filters"
+	oauthOIDCEncryptionKeyFilepathUsage = "path to the file with encryption keys used for encrypting/decrypting session tokens in the oauthOidc filters"
 
 	// connections, timeouts:
 	idleConnsPerHostUsage           = "maximum idle connections per backend host"
@@ -254,6 +259,9 @@ var (
 	oauth2TokeninfoTimeout          time.Duration
 	oauth2TokenintrospectionTimeout time.Duration
 	webhookTimeout                  time.Duration
+	// OIDC
+	oauthOIDCProviderURL           string
+	oauthOIDCEncryptionKeyFilepath string
 
 	// connections, timeouts:
 	idleConnsPerHost           int
@@ -363,6 +371,9 @@ func init() {
 	flag.DurationVar(&oauth2TokeninfoTimeout, "oauth2-tokeninfo-timeout", defaultOAuthTokeninfoTimeout, oauth2TokeninfoTimeoutUsage)
 	flag.DurationVar(&oauth2TokenintrospectionTimeout, "oauth2-tokenintrospect-timeout", defaultOAuthTokenintrospectionTimeout, oauth2TokenintrospectionTimeoutUsage)
 	flag.DurationVar(&webhookTimeout, "webhook-timeout", defaultWebhookTimeout, webhookTimeoutUsage)
+	// OIDC:
+	flag.StringVar(&oauthOIDCProviderURL, "oidc-provider-url", "", oauthOIDCProviderURLUsage)
+	flag.StringVar(&oauthOIDCEncryptionKeyFilepath, "oidc-encryption-key-filepath", "", oauthOIDCEncryptionKeyFilepathUsage)
 
 	// connections, timeouts:
 	flag.IntVar(&idleConnsPerHost, "idle-conns-num", proxy.DefaultIdleConnsPerHost, idleConnsPerHostUsage)
@@ -465,6 +476,34 @@ func main() {
 		os.Exit(2)
 	}
 
+	// configure OIDC
+	var oidcCipherManager auth.CipherManager
+	if oauthOIDCEncryptionKeyFilepath != "" {
+		keySource := &auth.KeyFilepathSource{
+			FilePath: oauthOIDCEncryptionKeyFilepath,
+		}
+
+		oidcCipherManager, err = auth.NewKeyRotationCipherManager(keySource)
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(2)
+		}
+	}
+
+	var oidcProviderURL *url.URL
+	if oauthOIDCProviderURL != "" {
+		oidcProviderURL, err = url.Parse(oauthOIDCProviderURL)
+		if err != nil {
+			log.Errorf("%v", err)
+			os.Exit(2)
+		}
+
+		if oidcCipherManager == nil {
+			log.Error("Encryption keys (-oidc-encryption-key-filepath) must be defined when '-oidc-provider-url' is set.")
+			os.Exit(2)
+		}
+	}
+
 	options := skipper.Options{
 		// generic:
 		Address:                         address,
@@ -549,6 +588,9 @@ func main() {
 		OAuthTokeninfoTimeout:          oauth2TokeninfoTimeout,
 		OAuthTokenintrospectionTimeout: oauth2TokenintrospectionTimeout,
 		WebhookTimeout:                 webhookTimeout,
+		// OIDC:
+		OIDCProviderURL:   oidcProviderURL,
+		OIDCCipherManager: oidcCipherManager,
 
 		// connections, timeouts:
 		IdleConnectionsPerHost:     idleConnsPerHost,

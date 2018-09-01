@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -446,6 +447,10 @@ type Options struct {
 	// WebhookTimeout sets timeout duration while calling a custom webhook auth service
 	WebhookTimeout time.Duration
 
+	OIDCProviderURL *url.URL
+
+	OIDCCipherManager auth.CipherManager
+
 	// MaxAuditBody sets the maximum read size of the body read by the audit log filter
 	MaxAuditBody int
 }
@@ -682,6 +687,17 @@ func Run(o Options) error {
 		auth.NewOAuthTokenintrospectionAnyKV(o.OAuthTokenintrospectionTimeout),
 		auth.NewOAuthTokenintrospectionAllKV(o.OAuthTokenintrospectionTimeout),
 		auth.NewWebhook(o.WebhookTimeout))
+
+	if o.OIDCCipherManager != nil {
+		log.Info("Enabling OIDC filters")
+
+		// OIDC filters
+		o.CustomFilters = append(o.CustomFilters,
+			auth.NewOAuthOidcUserInfos(o.OIDCProviderURL, o.OIDCCipherManager),
+			auth.NewOAuthOidcAnyClaims(o.OIDCProviderURL, o.OIDCCipherManager),
+			auth.NewOAuthOidcAllClaims(o.OIDCProviderURL, o.OIDCCipherManager),
+		)
+	}
 
 	// create a filter registry with the available filter specs registered,
 	// and register the custom filters

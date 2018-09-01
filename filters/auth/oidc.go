@@ -2,12 +2,8 @@ package auth
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -19,7 +15,6 @@ import (
 	oidc "github.com/coreos/go-oidc"
 	log "github.com/sirupsen/logrus"
 	"github.com/zalando/skipper/filters"
-	"golang.org/x/crypto/scrypt"
 	"golang.org/x/oauth2"
 )
 
@@ -34,24 +29,44 @@ const (
 
 type (
 	tokenOidcSpec struct {
-		typ roleCheckType
+		typ           roleCheckType
+		providerURL   *url.URL
+		cipherManager CipherManager
 	}
 
 	tokenOidcFilter struct {
-		typ        roleCheckType
-		config     *oauth2.Config
-		provider   *oidc.Provider
-		verifier   *oidc.IDTokenVerifier
-		claims     []string
-		validity   time.Duration
-		aead       cipher.AEAD
-		cookiename string
+		typ           roleCheckType
+		config        *oauth2.Config
+		provider      *oidc.Provider
+		verifier      *oidc.IDTokenVerifier
+		claims        []string
+		validity      time.Duration
+		cipherManager CipherManager
+		cookiename    string
 	}
 )
 
-func NewOAuthOidcUserInfos() filters.Spec { return &tokenOidcSpec{typ: checkOidcUserInfos} }
-func NewOAuthOidcAnyClaims() filters.Spec { return &tokenOidcSpec{typ: checkOidcAnyClaims} }
-func NewOAuthOidcAllClaims() filters.Spec { return &tokenOidcSpec{typ: checkOidcAllClaims} }
+func NewOAuthOidcUserInfos(providerURL *url.URL, cipherManager CipherManager) filters.Spec {
+	return &tokenOidcSpec{
+		typ:           checkOidcUserInfos,
+		providerURL:   providerURL,
+		cipherManager: cipherManager,
+	}
+}
+func NewOAuthOidcAnyClaims(providerURL *url.URL, cipherManager CipherManager) filters.Spec {
+	return &tokenOidcSpec{
+		typ:           checkOidcAnyClaims,
+		providerURL:   providerURL,
+		cipherManager: cipherManager,
+	}
+}
+func NewOAuthOidcAllClaims(providerURL *url.URL, cipherManager CipherManager) filters.Spec {
+	return &tokenOidcSpec{
+		typ:           checkOidcAllClaims,
+		providerURL:   providerURL,
+		cipherManager: cipherManager,
+	}
+}
 
 // CreateFilter creates an OpenID Connect authorization filter.
 //
@@ -70,18 +85,20 @@ func (s *tokenOidcSpec) CreateFilter(args []interface{}) (filters.Filter, error)
 		return nil, filters.ErrInvalidFilterParameters
 	}
 
-	providerURL, err := url.Parse(sargs[0])
+	var providerURL *url.URL
+	if sargs[0] == "" && s.providerURL != nil {
+		providerURL = s.providerURL
+	} else {
+		providerURL, err = url.Parse(sargs[0])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse OIDC Provider URL '%s': %v", sargs[0], err)
+		}
+	}
 
 	ctx := context.Background()
 	provider, err := oidc.NewProvider(ctx, providerURL.String())
 	if err != nil {
 		log.Errorf("Failed to create new provider %s: %v", providerURL, err)
-		return nil, filters.ErrInvalidFilterParameters
-	}
-
-	aesgcm, err := getCiphersuite()
-	if err != nil {
-		log.Errorf("Failed to create ciphersuite: %v", err)
 		return nil, filters.ErrInvalidFilterParameters
 	}
 
@@ -104,9 +121,9 @@ func (s *tokenOidcSpec) CreateFilter(args []interface{}) (filters.Filter, error)
 		verifier: provider.Verifier(&oidc.Config{
 			ClientID: sargs[1],
 		}),
-		validity:   1 * time.Hour,
-		aead:       aesgcm,
-		cookiename: oauthOidcCookieName + sargsHash,
+		validity:      1 * time.Hour,
+		cipherManager: s.cipherManager,
+		cookiename:    oauthOidcCookieName + sargsHash,
 	}
 	f.config.Scopes = []string{oidc.ScopeOpenID}
 
@@ -199,38 +216,6 @@ func randString(n int) string {
 	return string(b)
 }
 
-func getCiphersuite() (cipher.AEAD, error) {
-	password := getPassword()
-	salt := getSalt()
-
-	key, err := scrypt.Key(password, salt, 1<<15, 8, 1, 32)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create key: %v", err)
-	}
-	//key has to be 16 or 32 byte
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new cipher: %v", err)
-	}
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new GCM: %v", err)
-	}
-	return aesgcm, nil
-}
-
-// getPassword returns a secret byte slice to use as secret encryption key
-// TODO(sszuecs): add enc/dec cipher support and get all keymaterial from trusted sources
-func getPassword() []byte {
-	return []byte("supersecret")
-}
-
-// getSalt returns an 8 byte salt
-// TODO(sszuecs): get salt from trusted sources
-func getSalt() []byte {
-	return []byte{0xc8, 0x28, 0xf2, 0x58, 0xa7, 0x6a, 0xad, 0x7b}
-}
-
 func getTimestampFromState(b []byte, nonceLength int) time.Time {
 	log.Debugf("getTimestampFromState b: %s", b)
 	if len(b) <= secretSize+nonceLength || secretSize >= len(b)-nonceLength {
@@ -244,7 +229,6 @@ func getTimestampFromState(b []byte, nonceLength int) time.Time {
 		return time.Time{}
 	}
 	return time.Unix(int64(i), 0)
-
 }
 
 func createState(nonce string) string {
@@ -252,14 +236,14 @@ func createState(nonce string) string {
 }
 
 func (f *tokenOidcFilter) doRedirect(ctx filters.FilterContext) {
-	nonce, err := f.createNonce()
+	nonce, err := f.cipherManager.Nonce()
 	if err != nil {
 		log.Errorf("Failed to create nonce: %v", err)
 		return
 	}
 
 	statePlain := createState(fmt.Sprintf("%x", nonce))
-	stateEnc, err := f.encryptDataBlock([]byte(statePlain))
+	stateEnc, err := f.cipherManager.Encrypt([]byte(statePlain))
 	if err != nil {
 		log.Errorf("Failed to encrypt data block: %v", err)
 	}
@@ -292,7 +276,7 @@ func (f *tokenOidcFilter) Response(ctx filters.FilterContext) {
 			MaxAge:   int(f.validity.Seconds()),
 			Expires:  time.Now().Add(f.validity),
 		}
-		log.Debugf("Response SetCookie: %s: %s", cookie)
+		log.Debugf("Response SetCookie: %s", cookie)
 		http.SetCookie(ctx.ResponseWriter(), cookie)
 	}
 }
@@ -342,6 +326,7 @@ func (f *tokenOidcFilter) Request(ctx filters.FilterContext) {
 	}
 
 	if !oauth2Token.Valid() {
+		// TODO: use refresh token
 		unauthorized(ctx, "invalid token", invalidToken, r.Host)
 		return
 	}
@@ -391,7 +376,7 @@ func (f *tokenOidcFilter) Request(ctx filters.FilterContext) {
 		log.Infof("validateAllClaims: %v", allowed)
 
 	default:
-		log.Errorf("Wrong oauthOidcFilter type: %s", f)
+		log.Errorf("Wrong oauthOidcFilter type: %s", string(f.typ))
 		unauthorized(ctx, "unknown", invalidFilter, r.Host)
 		return
 	}
@@ -403,7 +388,7 @@ func (f *tokenOidcFilter) Request(ctx filters.FilterContext) {
 		return
 	}
 
-	encryptedData, err := f.encryptDataBlock(data)
+	encryptedData, err := f.cipherManager.Encrypt(data)
 	if err != nil {
 		log.Errorf("Failed to encrypt: %v", err)
 	}
@@ -415,34 +400,6 @@ func (f *tokenOidcFilter) Request(ctx filters.FilterContext) {
 
 	log.Infof("send authorized")
 	authorized(ctx, sub)
-}
-
-func (f *tokenOidcFilter) createNonce() ([]byte, error) {
-	nonce := make([]byte, f.aead.NonceSize())
-	if _, err := io.ReadFull(crand.Reader, nonce); err != nil {
-		return nil, err
-	}
-	return nonce, nil
-}
-
-// encryptDataBlock encrypts given plaintext
-func (f *tokenOidcFilter) encryptDataBlock(plaintext []byte) ([]byte, error) {
-	nonce, err := f.createNonce()
-	if err != nil {
-		return nil, err
-	}
-	return f.aead.Seal(nonce, nonce, plaintext, nil), nil
-}
-
-// decryptDataBlock decrypts given cipher text
-func (f *tokenOidcFilter) decryptDataBlock(cipherText []byte) ([]byte, error) {
-	nonceSize := f.aead.NonceSize()
-	if len(cipherText) < nonceSize {
-		return nil, errors.New("failed to decrypt, ciphertext too short")
-	}
-	nonce, input := cipherText[:nonceSize], cipherText[nonceSize:]
-
-	return f.aead.Open(nil, nonce, input, nil)
 }
 
 // TODO think about naming or splitting
@@ -502,7 +459,7 @@ func (f *tokenOidcFilter) getTokenFromCookie(ctx filters.FilterContext, cValueHe
 		return nil, err
 	}
 
-	cValuePlain, err := f.decryptDataBlock(cValue)
+	cValuePlain, err := f.cipherManager.Decrypt(cValue)
 	if err != nil {
 		log.Errorf("token from Cookie is invalid: %v", err)
 		return nil, err
@@ -533,14 +490,14 @@ func (f *tokenOidcFilter) getTokenWithExchange(ctx filters.FilterContext) (*oaut
 		return nil, err
 	}
 
-	stateQueryPlain, err := f.decryptDataBlock(stateQueryEnc)
+	stateQueryPlain, err := f.cipherManager.Decrypt(stateQueryEnc)
 	if err != nil {
 		log.Errorf("token from state query is invalid: %v", err)
 		return nil, err
 	}
 	log.Debugf("len(stateQueryPlain): %d, stateQueryEnc: %d, stateQueryEncHex: %d", len(stateQueryPlain), len(stateQueryEnc), len(stateQueryEncHex))
 
-	nonce, err := f.createNonce()
+	nonce, err := f.cipherManager.Nonce()
 	if err != nil {
 		log.Errorf("Failed to create nonce: %v", err)
 		return nil, err
