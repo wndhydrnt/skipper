@@ -120,13 +120,17 @@ Notes:
 ## stripQuery
 ## preserveHost
 
-Sets the incoming `Host: ` header also on the outgoing backend connection
+Sets the incoming `Host: ` header on the outgoing backend connection.
 
-Parameters: none
+It can be used to override the `proxyPreserveHost` behavior for individual routes.
+
+Parameters: "true" or "false"
+* "true" - use the Host header from the incoming request
+* "false" - use the host from the backend address
 
 Example:
 ```
-route1: * -> preserveHost() -> "http://backend.example.org";
+route1: * -> preserveHost("true") -> "http://backend.example.org";
 ```
 
 ## status
@@ -381,6 +385,24 @@ Examples:
 basicAuth("/path/to/htpasswd")
 basicAuth("/path/to/htpasswd", "My Website")
 ```
+
+## webhook
+
+The `webhook` filter makes it possible to have your own authentication and
+authorization endpoint as a filter.
+
+Headers from the incoming request will be copied into the request that
+is being done to the webhook endpoint. Responses from the webhook with
+status code less than 300 will be authorized, rest unauthorized.
+
+Examples:
+
+```
+webhook("https://custom-webhook.example.org/auth")
+```
+
+The webhook timeout has a default of 2 seconds and can be globally
+changed, if skipper is started with `-webhook-timeout=2s` flag.
 
 ## oauthTokeninfoAnyScope
 
@@ -687,3 +709,47 @@ corsOrigin()
 corsOrigin("https://www.example.org")
 corsOrigin("https://www.example.org", "http://localhost:9001")
 ```
+
+## headerToQuery
+
+Filter which assigns the value of a given header from the incoming Request to a given query param
+
+Parameters:
+
+* The name of the header to pick from request
+* The name of the query param key to add to request
+
+Examples:
+
+```
+headerToQuery("X-Foo-Header", "foo-query-param")
+```
+
+The above filter will set `foo-query-param` query param respectively to the `X-Foo-Header` header
+and will override the value if the queryparam exists already
+
+## queryToHeader
+
+Filter which assigns the value of a given query param from the
+incoming Request to a given Header with optional format string value.
+
+Parameters:
+
+* The name of the query param key to pick from request
+* The name of the header to add to request
+* The format string used to create the header value, which gets the
+  value from the query value as before
+
+Examples:
+
+```
+queryToHeader("foo-query-param", "X-Foo-Header")
+queryToHeader("access_token", "Authorization", "Bearer %s")
+```
+
+The first filter will set `X-Foo-Header` header respectively to the `foo-query-param` query param
+and will not override the value if the header exists already.
+
+The second filter will set `Authorization` header to the
+`access_token` query param with a prefix value `Bearer ` and will
+not override the value if the header exists already.
