@@ -58,6 +58,30 @@ import (
 	ot "github.com/opentracing/opentracing-go"
 )
 
+const (
+	defServiceName = "skipper"
+)
+
+var (
+	tracers = map[string]func(opts []string) (ot.Tracer, error){}
+)
+
+// InitTracer initializes an opentracing tracer. The first option item is the
+// tracer implementation name.
+func InitTracer(opts []string) (tracer ot.Tracer, err error) {
+	if len(opts) == 0 {
+		return nil, errors.New("opentracing: the implementation parameter is mandatory")
+	}
+	var impl string
+	impl, opts = opts[0], opts[1:]
+
+	if init, ok := tracers[impl]; ok {
+		return init(opts)
+	}
+
+	return nil, fmt.Errorf("tracer '%s' not supported. Make sure it's built into skipper", impl)
+}
+
 func LoadTracingPlugin(pluginDirs []string, opts []string) (tracer ot.Tracer, err error) {
 	for _, dir := range pluginDirs {
 		tracer, err = LoadPlugin(dir, opts)

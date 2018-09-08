@@ -13,6 +13,7 @@ TEST_PLUGINS       = _test_plugins/filter_noop.so \
 		     _test_plugins/multitype_noop.so \
 		     _test_plugins_fail/fail.so
 GO111             ?= on
+BUILD_TAGS        ?= ""
 
 default: build
 
@@ -23,18 +24,18 @@ bindir:
 	mkdir -p bin
 
 skipper: $(SOURCES) bindir
-	GO111MODULE=$(GO111) go build -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT_HASH)" -o bin/skipper ./cmd/skipper/*.go
+	GO111MODULE=$(GO111) go build -tags "$(BUILD_TAGS)" -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT_HASH)" -o bin/skipper ./cmd/skipper/*.go
 
 eskip: $(SOURCES) bindir
-	GO111MODULE=$(GO111) go build -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT_HASH)" -o bin/eskip ./cmd/eskip/*.go
+	GO111MODULE=$(GO111) go build -tags "$(BUILD_TAGS)" -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT_HASH)" -o bin/eskip ./cmd/eskip/*.go
 
 build: $(SOURCES) lib skipper eskip
 
 build.osx:
-	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o bin/skipper -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT_HASH)" ./cmd/skipper
+	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o bin/skipper -tags "$(BUILD_TAGS)" -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT_HASH)" ./cmd/skipper
 
 build.windows:
-	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o bin/skipper -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT_HASH)" ./cmd/skipper
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o bin/skipper -tags "$(BUILD_TAGS)" -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT_HASH)" ./cmd/skipper
 
 install: $(SOURCES)
 	go install -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT_HASH)" ./cmd/skipper
