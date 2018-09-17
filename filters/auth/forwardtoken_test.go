@@ -59,7 +59,7 @@ func TestForwardTokenInfo(t *testing.T) {
 	} {
 		t.Run(ti.msg, func(t *testing.T) {
 			t.Logf("Running test for %v", ti)
-			clientServer := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+         		clientServer := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 				if ti.oauthFilterPresent {
 					tokenInfo := r.Header.Get(ti.headerName)
 					var info testTokeninfo
@@ -77,6 +77,7 @@ func TestForwardTokenInfo(t *testing.T) {
 					}
 				}
 			}))
+			defer clientServer.Close()
 
 			authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				info, err := json.Marshal(ti.tokenInfo)
@@ -89,6 +90,7 @@ func TestForwardTokenInfo(t *testing.T) {
 				w.Write(info)
 				return
 			}))
+			defer authServer.Close()
 
 			var routeFilters []*eskip.Filter
 			fr := make(filters.Registry)
@@ -184,6 +186,7 @@ func TestForwardTokenIntrospection(t *testing.T) {
 					}
 				}
 			}))
+			defer clientServer.Close()
 
 			authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				tokenIntro, err := json.Marshal(ti.tokenIntrospection)
@@ -192,6 +195,7 @@ func TestForwardTokenIntrospection(t *testing.T) {
 				}
 				w.Write(tokenIntro)
 			}))
+			defer authServer.Close()
 
 			testOidcConfig := &openIDConfig{
 				ClaimsSupported: []string{"email"},
