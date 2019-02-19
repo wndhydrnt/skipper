@@ -16,6 +16,7 @@ import (
 	"github.com/coreos/go-oidc"
 	log "github.com/sirupsen/logrus"
 	"github.com/zalando/skipper/filters"
+	logfilter "github.com/zalando/skipper/filters/log"
 	"golang.org/x/oauth2"
 )
 
@@ -26,6 +27,7 @@ const (
 
 	oauthOidcCookieName = "skipperOauthOidc"
 	stateValidity       = 1 * time.Minute
+	oidcAccessToken     = "oidcAccessToken"
 )
 
 type (
@@ -323,7 +325,12 @@ func (f *tokenOidcFilter) doOauthRedirect(ctx filters.FilterContext) {
 	ctx.Serve(rsp)
 }
 
-func (f *tokenOidcFilter) Response(filters.FilterContext) {}
+func (f *tokenOidcFilter) Response(ctx filters.FilterContext) {
+	accessToken := ctx.StateBag()[oidcAccessToken]
+	uname := ctx.StateBag()[logfilter.AuthUserKey]
+	ctx.Request().Header.Add("OAuth2Token", accessToken.(string))
+	ctx.Request().Header.Add("OAuth2Username", uname.(string))
+}
 
 func extractDomainFromHost(host string) string {
 	h, _, err := net.SplitHostPort(host)
@@ -436,6 +443,7 @@ func (f *tokenOidcFilter) Request(ctx filters.FilterContext) {
 	var (
 		allowed bool
 		sub     string
+		token   string
 	)
 
 	// filter specific checks
@@ -451,6 +459,7 @@ func (f *tokenOidcFilter) Request(ctx filters.FilterContext) {
 			allowed = true
 		}
 		sub = container.Subject
+		token = container.OAuth2Token.AccessToken
 	case checkOIDCAnyClaims:
 		var container claimsContainer
 		err := json.Unmarshal([]byte(cookie), &container)
@@ -461,6 +470,7 @@ func (f *tokenOidcFilter) Request(ctx filters.FilterContext) {
 		allowed = f.validateAnyClaims(container.Claims)
 		log.Debugf("validateAnyClaims: %v", allowed)
 		sub = container.Subject
+		token = container.OAuth2Token.AccessToken
 	case checkOIDCAllClaims:
 		var container claimsContainer
 		err := json.Unmarshal([]byte(cookie), &container)
@@ -471,6 +481,7 @@ func (f *tokenOidcFilter) Request(ctx filters.FilterContext) {
 		allowed = f.validateAllClaims(container.Claims)
 		log.Debugf("validateAllClaims: %v", allowed)
 		sub = container.Subject
+		token = container.OAuth2Token.AccessToken
 	default:
 		unauthorized(ctx, "unknown", invalidFilter, r.Host)
 		return
@@ -482,6 +493,7 @@ func (f *tokenOidcFilter) Request(ctx filters.FilterContext) {
 	}
 
 	authorized(ctx, sub)
+	ctx.StateBag()[oidcAccessToken] = token
 }
 
 func (f *tokenOidcFilter) tokenClaims(ctx filters.FilterContext, oauth2Token *oauth2.Token) (map[string]interface{}, string, error) {
