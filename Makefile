@@ -107,6 +107,7 @@ vet: $(SOURCES)
 staticcheck: $(SOURCES)
 	GO111MODULE=on staticcheck -checks "all,-ST1000,-ST1003,-ST1012" $(PACKAGES)
 
+# needs GOPATH install to check https://github.com/securego/gosec/issues/234
 # TODO(sszuecs) review disabling these checks, f.e.:
 # G101 find by variable name match "oauth" are not hardcoded credentials
 # G104 ignoring errors are in few cases fine
