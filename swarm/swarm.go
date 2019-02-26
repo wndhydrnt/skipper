@@ -269,6 +269,10 @@ func Join(o Options, self *NodeInfo, nodes []*NodeInfo, cleanupF func()) (*Swarm
 	return s, nil
 }
 
+func (s *Swarm) Members() int {
+	return s.mlist.NumMembers()
+}
+
 // control is the control loop of a Swarm member.
 func (s *Swarm) control() {
 	for {
